@@ -1,10 +1,11 @@
 package hoardcmd
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+)
 
 func init() {
 	rootCmd.AddCommand(runCmd)
-
 }
 
 var runCmd = &cobra.Command{
@@ -18,7 +19,6 @@ var runCmd = &cobra.Command{
 		if err := cmd.ParseFlags(args); err != nil {
 			return err
 		}
-
 		return h.Serve(ctx, laddr)
 	},
 }

@@ -16,10 +16,6 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
-func init() {
-	rootCmd.AddCommand(runCmd)
-}
-
 var rootCmd = &cobra.Command{
 	Use:   "hoard",
 	Short: "Hoard is a CMS for data hoarders",

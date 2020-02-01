@@ -23,6 +23,7 @@ func newHTTPAPI(n *Node) *HTTPAPI {
 	r.Get("/d/{mID:\\d+}", s.getData)
 	r.Get("/d/{mID:\\d+}/{p}", s.getData)
 	r.Get("/ui", s.renderAll)
+	r.Get("/status", s.status)
 	r.Get("/", s.renderAll)
 
 	s.r = r
@@ -98,4 +99,10 @@ func (s *HTTPAPI) getData(w http.ResponseWriter, r *http.Request) {
 
 	ext, _ := s.n.GetTag(ctx, uint64(mID), "extension")
 	http.ServeContent(w, r, ext, time.Time{}, content)
+}
+
+func (s *HTTPAPI) status(w http.ResponseWriter, r *http.Request) {
+	status := s.n.Status()
+	data, _ := json.MarshalIndent(status, "", " ")
+	w.Write(data)
 }
