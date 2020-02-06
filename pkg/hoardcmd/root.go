@@ -19,8 +19,8 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.Flags().StringVar(&dataDir, "data-dir", "./", "--data-dir=/path/to/data")
-	rootCmd.Flags().StringVar(&contentDir, "content-dir", "", "--content-dir=/path/to/content")
+	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "./", "--data-dir=/path/to/data")
+	rootCmd.PersistentFlags().StringVar(&contentDir, "content-dir", "", "--content-dir=/path/to/content")
 }
 
 var rootCmd = &cobra.Command{
