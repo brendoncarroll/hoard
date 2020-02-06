@@ -18,6 +18,8 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/simplemux"
 	"github.com/brendoncarroll/go-p2p/s/wlswarm"
+	"github.com/brendoncarroll/hoard/pkg/boltkv"
+	"github.com/brendoncarroll/hoard/pkg/fsbridge"
 	"github.com/brendoncarroll/hoard/pkg/hoardnet"
 	"github.com/brendoncarroll/hoard/pkg/taggers"
 	"github.com/brendoncarroll/webfs/pkg/webfsim"
@@ -34,6 +36,8 @@ type Node struct {
 	peerStore *PeerStore
 	discover  p2p.DiscoveryService
 
+	fsbridges []fsbridge.Bridge
+
 	hnet *hoardnet.HoardNet
 
 	bcn *blobcache.Node
@@ -46,11 +50,23 @@ type Node struct {
 
 func New(params *Params) (*Node, error) {
 	extSources := []blobs.Getter{}
-	// for _, p := range params.SourcePaths {
-	// 	spec := fsbridge.Spec
-	// 	b := fsbridge.New(spec, nil) //TODO
-	// 	extSources = append(extSources)
-	// }
+	bridges := []*fsbridge.Bridge{}
+	for _, p := range params.SourcePaths {
+		bucketName := "fsbridge"
+		kv := boltkv.New(params.DB, bucketName)
+		fsbp := fsbridge.Params{
+			KV:         kv,
+			Path:       p,
+			ScanPeriod: 60 * time.Minute,
+		}
+		b := fsbridge.New(fsbp)
+		log.WithFields(log.Fields{
+			"path": p,
+		}).Info("created fs bridge")
+
+		extSources = append(extSources, b)
+		bridges = append(bridges)
+	}
 
 	// p2p
 	peerStore := newPeerStore(params.DB)
