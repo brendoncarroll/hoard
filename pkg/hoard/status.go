@@ -28,7 +28,7 @@ func (n *Node) Status() Status {
 
 	peerInfos := []*PeerInfo{}
 	for _, id := range n.peerStore.ListPeers() {
-		pinfo := n.peerStore.GetPeerInfo(id)
+		pinfo, _ := n.peerStore.GetPeerInfo(id)
 		peerInfos = append(peerInfos, pinfo)
 	}
 

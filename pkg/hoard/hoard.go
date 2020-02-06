@@ -17,6 +17,7 @@ import (
 	"github.com/brendoncarroll/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/simplemux"
+	"github.com/brendoncarroll/go-p2p/s/wlswarm"
 	"github.com/brendoncarroll/hoard/pkg/hoardnet"
 	"github.com/brendoncarroll/hoard/pkg/taggers"
 	"github.com/brendoncarroll/webfs/pkg/webfsim"
@@ -30,7 +31,6 @@ const bucketManifests = "manifests"
 type Node struct {
 	localID   p2p.PeerID
 	swarm     p2p.SecureAskSwarm
-	mux       simplemux.Muxer
 	peerStore *PeerStore
 	discover  p2p.DiscoveryService
 
@@ -52,6 +52,12 @@ func New(params *Params) (*Node, error) {
 	// 	extSources = append(extSources)
 	// }
 
+	// p2p
+	peerStore := newPeerStore(params.DB)
+	swarm := wlswarm.WrapSecureAsk(params.Swarm, peerStore.Contains)
+	mux := simplemux.MultiplexSwarm(swarm)
+
+	// blobcache
 	cache, err := blobcache.NewBoltKV(params.BlobcacheDB, []byte("data"), params.Capacity)
 	if err != nil {
 		return nil, err
@@ -69,9 +75,8 @@ func New(params *Params) (*Node, error) {
 	n := &Node{
 		// p2p
 		localID:   p2p.NewPeerID(params.Swarm.PublicKey()),
-		swarm:     params.Swarm,
-		mux:       params.Mux,
-		peerStore: newPeerStore(params.DB),
+		swarm:     swarm,
+		peerStore: peerStore,
 
 		// blobcache
 		bcn: bcn,
@@ -81,7 +86,7 @@ func New(params *Params) (*Node, error) {
 
 		tagdb: NewTagDB(params.DB),
 	}
-	n.hnet, err = hoardnet.New(params.Mux, n, n.peerStore)
+	n.hnet, err = hoardnet.New(mux, n, n.peerStore)
 	if err != nil {
 		return nil, err
 	}
@@ -294,6 +299,27 @@ func (n *Node) GetManifest(ctx context.Context, id uint64) (*Manifest, error) {
 	mf.Peer = n.localID
 
 	return mf, nil
+}
+
+func (n *Node) ListManifests(ctx context.Context, start, count int) ([]uint64, error) {
+	ids := []uint64{}
+	err := n.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketManifests))
+		if b == nil {
+			return nil
+		}
+
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			if v == nil {
+				continue
+			}
+			id := bytesToID(k)
+			ids = append(ids, id)
+		}
+		return nil
+	})
+	return ids, err
 }
 
 func (n *Node) GetTag(ctx context.Context, mID uint64, name string) (string, error) {

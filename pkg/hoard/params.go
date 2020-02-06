@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-p2p/p/simplemux"
 	"github.com/brendoncarroll/go-p2p/s/aggswarm"
 	"github.com/brendoncarroll/go-p2p/s/natswarm"
 	"github.com/brendoncarroll/go-p2p/s/sshswarm"
@@ -21,7 +20,6 @@ import (
 
 type Params struct {
 	Swarm p2p.SecureAskSwarm
-	Mux   simplemux.Muxer
 	DB    *bolt.DB
 
 	BlobcacheDB *bolt.DB
@@ -29,7 +27,7 @@ type Params struct {
 	SourcePaths []string
 }
 
-func DefaultParams(dirpath string) (*Params, error) {
+func DefaultParams(dirpath string, sourcePaths []string) (*Params, error) {
 	pkFilename := "hoard_private_key.pem"
 	pkPath := filepath.Join(dirpath, pkFilename)
 
@@ -76,19 +74,18 @@ func DefaultParams(dirpath string) (*Params, error) {
 	if err != nil {
 		return nil, err
 	}
-	mux := simplemux.MultiplexSwarm(swarm1)
 
 	return &Params{
 		Swarm:       swarm1.(p2p.SecureAskSwarm),
-		Mux:         mux,
 		DB:          db,
 		BlobcacheDB: bdb,
 		Capacity:    1e5, // about 6 GB
+		SourcePaths: sourcePaths,
 	}, nil
 }
 
 func setupSwarm(privKey p2p.PrivateKey) (p2p.Swarm, error) {
-	s1, err := sshswarm.New("0.0.0.0:", privKey)
+	s1, err := sshswarm.New("0.0.0.0:", privKey, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -18,8 +18,8 @@ type Manifest struct {
 	ID   uint64     `json:"id"`
 
 	WebRef     *webref.Ref `json:"webref"`
-	PinSetName string      `json:"pinset_name"`
-	PinSetRoot *blobs.ID   `json:"pinset_root"`
+	PinSetName string      `json:"pinset_name,omitempty"`
+	PinSetRoot *blobs.ID   `json:"pinset_root,omitempty"`
 	BlobCount  uint64      `json:"blob_count"`
 
 	Tags          taggers.TagSet `json:"tags"`

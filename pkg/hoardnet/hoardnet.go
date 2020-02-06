@@ -5,7 +5,10 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/simplemux"
+	"github.com/brendoncarroll/hoard/pkg/hoardproto"
+	"github.com/brendoncarroll/hoard/pkg/taggers"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -24,11 +27,12 @@ func New(mux simplemux.Muxer, query Queryable, peerStore PeerStore) (*HoardNet, 
 		return nil, errors.Wrap(err, "couldn't open health channel")
 	}
 	hs := NewHealthcheck(healthSwarm.(p2p.AskSwarm), peerStore)
+
 	querySwarm, err := mux.OpenChannel(QueryChannel)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't open search channel on mux")
 	}
-	qs := NewQueryService(query, querySwarm.(p2p.AskSwarm))
+	qs := NewQueryService(query, peerStore, querySwarm.(p2p.SecureAskSwarm))
 
 	return &HoardNet{
 		healthService: hs,
@@ -36,6 +40,22 @@ func New(mux simplemux.Muxer, query Queryable, peerStore PeerStore) (*HoardNet, 
 	}, nil
 }
 
-func (hn *HoardNet) Query(ctx context.Context, tags map[string]string) {
+func (hn *HoardNet) QueryPeers(ctx context.Context, tags taggers.TagSet, limit int) ([]*hoardproto.Manifest, error) {
+	mfs, err := hn.queryService.QueryRemotes(ctx, tags, limit)
+	return mfs, err
+}
 
+func (hn *HoardNet) Close() error {
+	srvs := []interface {
+		Close() error
+	}{
+		hn.queryService,
+		hn.healthService,
+	}
+	for _, s := range srvs {
+		if err := s.Close(); err != nil {
+			log.Error(err)
+		}
+	}
+	return nil
 }
