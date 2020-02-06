@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,20 +15,30 @@ import (
 
 	"github.com/brendoncarroll/blobcache/pkg/blobcache"
 	"github.com/brendoncarroll/blobcache/pkg/blobs"
-	"github.com/brendoncarroll/go-p2p/simplemux"
+	"github.com/brendoncarroll/go-p2p"
+	"github.com/brendoncarroll/go-p2p/p/simplemux"
+	"github.com/brendoncarroll/go-p2p/s/wlswarm"
+	"github.com/brendoncarroll/hoard/pkg/hoardnet"
 	"github.com/brendoncarroll/hoard/pkg/taggers"
 	"github.com/brendoncarroll/webfs/pkg/webfsim"
 	"github.com/brendoncarroll/webfs/pkg/webref"
+	log "github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
 const bucketManifests = "manifests"
 
 type Node struct {
-	mux simplemux.Muxer
+	localID   p2p.PeerID
+	swarm     p2p.SecureAskSwarm
+	peerStore *PeerStore
+	discover  p2p.DiscoveryService
+
+	hnet *hoardnet.HoardNet
+
+	bcn *blobcache.Node
 
 	db    *bolt.DB
-	bcn   *blobcache.Node
 	tagdb *TagDB
 
 	suggestedCache sync.Map
@@ -43,6 +52,12 @@ func New(params *Params) (*Node, error) {
 	// 	extSources = append(extSources)
 	// }
 
+	// p2p
+	peerStore := newPeerStore(params.DB)
+	swarm := wlswarm.WrapSecureAsk(params.Swarm, peerStore.Contains)
+	mux := simplemux.MultiplexSwarm(swarm)
+
+	// blobcache
 	cache, err := blobcache.NewBoltKV(params.BlobcacheDB, []byte("data"), params.Capacity)
 	if err != nil {
 		return nil, err
@@ -56,12 +71,27 @@ func New(params *Params) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Node{
-		db:    params.DB,
-		bcn:   bcn,
-		mux:   params.Mux,
+
+	n := &Node{
+		// p2p
+		localID:   p2p.NewPeerID(params.Swarm.PublicKey()),
+		swarm:     swarm,
+		peerStore: peerStore,
+
+		// blobcache
+		bcn: bcn,
+
+		// db
+		db: params.DB,
+
 		tagdb: NewTagDB(params.DB),
-	}, nil
+	}
+	n.hnet, err = hoardnet.New(mux, n, n.peerStore)
+	if err != nil {
+		return nil, err
+	}
+
+	return n, nil
 }
 
 // AddFile imports and creates a manifest for the file at p
@@ -255,7 +285,7 @@ func (n *Node) GetManifest(ctx context.Context, id uint64) (*Manifest, error) {
 	mf.Tags = tags
 	// suggested tags
 	// this can be slow
-	//mf.SuggestedTags = n.suggestTags(ctx, mf.WebRef)
+	mf.SuggestedTags = n.suggestTags(ctx, mf.WebRef)
 
 	// pinset
 	pinSet, err := n.bcn.GetPinSet(ctx, mf.PinSetName)
@@ -266,8 +296,30 @@ func (n *Node) GetManifest(ctx context.Context, id uint64) (*Manifest, error) {
 	if pinSet.Root != blobs.ZeroID() {
 		mf.PinSetRoot = &pinSet.Root
 	}
+	mf.Peer = n.localID
 
 	return mf, nil
+}
+
+func (n *Node) ListManifests(ctx context.Context, start, count int) ([]uint64, error) {
+	ids := []uint64{}
+	err := n.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketManifests))
+		if b == nil {
+			return nil
+		}
+
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			if v == nil {
+				continue
+			}
+			id := bytesToID(k)
+			ids = append(ids, id)
+		}
+		return nil
+	})
+	return ids, err
 }
 
 func (n *Node) GetTag(ctx context.Context, mID uint64, name string) (string, error) {
@@ -275,6 +327,7 @@ func (n *Node) GetTag(ctx context.Context, mID uint64, name string) (string, err
 }
 
 func (n *Node) Serve(ctx context.Context, laddr string) error {
+	log.Debug("Serving UI on ", laddr, "...")
 	hapi := newHTTPAPI(n)
 	return http.ListenAndServe(laddr, hapi)
 }

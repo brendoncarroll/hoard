@@ -19,6 +19,9 @@ func SuggestTags(r io.ReadSeeker, tags TagSet) error {
 	stagingTags := []Tag{}
 	for _, tf := range tfs {
 		var err error
+		if _, err := r.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
 		stagingTagsNew, err := tf(r, stagingTags)
 		if err == nil {
 			stagingTags = stagingTagsNew
