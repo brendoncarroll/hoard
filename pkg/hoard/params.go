@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-p2p/s/aggswarm"
+	"github.com/brendoncarroll/go-p2p/s/multiswarm"
 	"github.com/brendoncarroll/go-p2p/s/natswarm"
-	"github.com/brendoncarroll/go-p2p/s/sshswarm"
+	"github.com/brendoncarroll/go-p2p/s/quicswarm"
 	log "github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
@@ -85,13 +85,13 @@ func DefaultParams(dirpath string, sourcePaths []string) (*Params, error) {
 }
 
 func setupSwarm(privKey p2p.PrivateKey) (p2p.Swarm, error) {
-	s1, err := sshswarm.New("0.0.0.0:", privKey, nil)
+	s1, err := quicswarm.New("0.0.0.0:", privKey)
 	if err != nil {
 		return nil, err
 	}
-	s2 := natswarm.New(s1).(p2p.SecureAskSwarm)
-	s3 := aggswarm.New(privKey, map[string]aggswarm.Transport{
-		"ssh": s2,
+	s2 := natswarm.WrapSecureAsk(s1)
+	s3 := multiswarm.NewSecureAsk(map[string]p2p.SecureAskSwarm{
+		"quic": s2,
 	})
 	return s3, nil
 }

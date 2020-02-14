@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/brendoncarroll/blobcache/pkg/blobcache"
+	"github.com/brendoncarroll/blobcache/pkg/blobnet"
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
-var _ blobcache.PeerStore = &PeerStore{}
+var _ blobnet.PeerStore = &PeerStore{}
 
 const bucketPeers = "peers"
 
@@ -27,10 +27,11 @@ type PeerInfo struct {
 }
 
 type PeerStore struct {
+	s  p2p.Swarm
 	db *bolt.DB
 }
 
-func newPeerStore(db *bolt.DB) *PeerStore {
+func newPeerStore(db *bolt.DB, s p2p.Swarm) *PeerStore {
 	return &PeerStore{db: db}
 }
 
@@ -94,10 +95,15 @@ func (ps *PeerStore) AddStaticAddr(id p2p.PeerID, addr string) error {
 	})
 }
 
-func (ps *PeerStore) Seen(id p2p.PeerID, addr string) error {
+func (ps *PeerStore) Seen(id p2p.PeerID, addr p2p.Addr) error {
+	data, err := addr.MarshalText()
+	if err != nil {
+		return err
+	}
+	addrStr := string(data)
 	return ps.update(id, func(x *PeerInfo) PeerInfo {
 		y := *x
-		y.SeenAt[addr] = time.Now()
+		y.SeenAt[addrStr] = time.Now()
 		return y
 	})
 }
@@ -139,13 +145,22 @@ func (ps *PeerStore) ListPeers() []p2p.PeerID {
 	return ids
 }
 
-func (ps *PeerStore) ListAddrs(id p2p.PeerID) []string {
+func (ps *PeerStore) GetAddrs(id p2p.PeerID) []p2p.Addr {
 	pinfo, err := ps.GetPeerInfo(id)
 	if err != nil {
 		log.Error(err)
 		return nil
 	}
-	return pinfo.StaticAddrs
+	addrs := []p2p.Addr{}
+	for _, addrStr := range pinfo.StaticAddrs {
+		addr, err := ps.s.ParseAddr([]byte(addrStr))
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+		addrs = append(addrs, addr)
+	}
+	return addrs
 }
 
 func (ps *PeerStore) TrustFor(id p2p.PeerID) (int64, error) {

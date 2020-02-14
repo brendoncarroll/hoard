@@ -112,14 +112,12 @@ func (qs *QueryService) queryRemote(ctx context.Context, id p2p.PeerID, req *Que
 	if err != nil {
 		panic(err)
 	}
-	addrStrs := qs.peers.ListAddrs(id)
-	if len(addrStrs) < 1 {
+	addrs := qs.peers.GetAddrs(id)
+	if len(addrs) < 1 {
 		return nil, errors.New("no addresses for peer")
 	}
-	addr := p2p.NewAddrOfType(qs.s)
-	if err := addr.UnmarshalText([]byte(addrStrs[0])); err != nil {
-		return nil, err
-	}
+	addr := addrs[0]
+
 	resData, err := qs.s.Ask(ctx, addr, reqData)
 	if err != nil {
 		return nil, err

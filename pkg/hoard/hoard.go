@@ -69,7 +69,7 @@ func New(params *Params) (*Node, error) {
 	}
 
 	// p2p
-	peerStore := newPeerStore(params.DB)
+	peerStore := newPeerStore(params.DB, params.Swarm)
 	swarm := wlswarm.WrapSecureAsk(params.Swarm, peerStore.Contains)
 	mux := simplemux.MultiplexSwarm(swarm)
 
@@ -78,12 +78,14 @@ func New(params *Params) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	bcp := blobcache.Params{
+
+	bcn, err := blobcache.NewNode(blobcache.Params{
+		Mux:             mux,
+		PeerStore:       peerStore,
 		MetadataDB:      params.BlobcacheDB,
 		Cache:           cache,
 		ExternalSources: extSources,
-	}
-	bcn, err := blobcache.NewNode(bcp)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +104,7 @@ func New(params *Params) (*Node, error) {
 
 		tagdb: NewTagDB(params.DB),
 	}
-	n.hnet, err = hoardnet.New(mux, n, n.peerStore)
+	n.hnet, err = hoardnet.New(mux, n, peerStore)
 	if err != nil {
 		return nil, err
 	}

@@ -11,8 +11,8 @@ import (
 
 type PeerStore interface {
 	ListPeers() []p2p.PeerID
-	ListAddrs(p2p.PeerID) []string
-	Seen(p2p.PeerID, string) error
+	GetAddrs(p2p.PeerID) []p2p.Addr
+	Seen(p2p.PeerID, p2p.Addr) error
 }
 
 type Healthcheck struct {
@@ -63,20 +63,13 @@ func (hb *Healthcheck) checkAll(ctx context.Context) {
 	ctx, cf := context.WithTimeout(ctx, hb.period/2)
 	defer cf()
 	for _, id := range hb.peerStore.ListPeers() {
-		for _, addrStr := range hb.peerStore.ListAddrs(id) {
-			addr := p2p.NewAddrOfType(hb.s)
-			if err := addr.UnmarshalText([]byte(addrStr)); err != nil {
-				log.Error("could not parse addr:", addrStr)
-				continue
-			}
-
+		for _, addr := range hb.peerStore.GetAddrs(id) {
 			go func() {
 				if err := hb.checkPeer(ctx, addr); err != nil {
 					log.Debug(err)
-				} else {
-					addrText, _ := addr.MarshalText()
-					hb.peerStore.Seen(id, string(addrText))
+					return
 				}
+				hb.peerStore.Seen(id, addr)
 			}()
 		}
 	}
