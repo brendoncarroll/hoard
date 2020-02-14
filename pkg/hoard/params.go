@@ -25,9 +25,10 @@ type Params struct {
 	BlobcacheDB *bolt.DB
 	Capacity    uint64
 	SourcePaths []string
+	UIPath      string
 }
 
-func DefaultParams(dirpath string, sourcePaths []string) (*Params, error) {
+func DefaultParams(dirpath string, sourcePaths []string, uiPath string) (*Params, error) {
 	pkFilename := "hoard_private_key.pem"
 	pkPath := filepath.Join(dirpath, pkFilename)
 
@@ -81,6 +82,7 @@ func DefaultParams(dirpath string, sourcePaths []string) (*Params, error) {
 		BlobcacheDB: bdb,
 		Capacity:    1e5, // about 6 GB
 		SourcePaths: sourcePaths,
+		UIPath:      uiPath,
 	}, nil
 }
 

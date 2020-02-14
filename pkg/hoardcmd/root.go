@@ -2,6 +2,7 @@ package hoardcmd
 
 import (
 	"context"
+	"path/filepath"
 
 	"github.com/brendoncarroll/hoard/pkg/hoard"
 	"github.com/spf13/cobra"
@@ -12,6 +13,7 @@ var (
 	ctx        = context.Background()
 	dataDir    string
 	contentDir string
+	uiDir      string
 )
 
 func Execute() error {
@@ -21,6 +23,7 @@ func Execute() error {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "./", "--data-dir=/path/to/data")
 	rootCmd.PersistentFlags().StringVar(&contentDir, "content-dir", "", "--content-dir=/path/to/content")
+	rootCmd.PersistentFlags().StringVar(&uiDir, "ui-dir", "", "--ui-dir=/path/to/ui")
 }
 
 var rootCmd = &cobra.Command{
@@ -42,7 +45,14 @@ func setup() (err error) {
 	if contentDir != "" {
 		sourcePaths = append(sourcePaths, contentDir)
 	}
-	params, err := hoard.DefaultParams(dataDir, sourcePaths)
+	if uiDir != "" {
+		uiDir, err = filepath.Abs(uiDir)
+		if err != nil {
+			return err
+		}
+	}
+
+	params, err := hoard.DefaultParams(dataDir, sourcePaths, uiDir)
 	if err != nil {
 		return err
 	}

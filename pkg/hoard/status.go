@@ -16,6 +16,9 @@ func (n *Node) Status() Status {
 	count := uint64(0)
 	n.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucketManifests))
+		if b == nil {
+			return nil
+		}
 		count = uint64(b.Stats().KeyN)
 		return nil
 	})
