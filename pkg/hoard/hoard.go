@@ -31,6 +31,7 @@ import (
 const bucketManifests = "manifests"
 
 type Node struct {
+	params    Params
 	localID   p2p.PeerID
 	swarm     p2p.SecureAskSwarm
 	peerStore *PeerStore
@@ -91,6 +92,7 @@ func New(params *Params) (*Node, error) {
 	}
 
 	n := &Node{
+		params: *params,
 		// p2p
 		localID:   p2p.NewPeerID(params.Swarm.PublicKey()),
 		swarm:     swarm,
@@ -367,6 +369,10 @@ func (n *Node) suggestTags(ctx context.Context, ref *webref.Ref) taggers.TagSet 
 	}
 	n.suggestedCache.Store(ref.String(), tags)
 	return tags
+}
+
+func (n *Node) getUIPath() string {
+	return n.params.UIPath
 }
 
 func (n *Node) genPinSetName() string {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi"
+	log "github.com/sirupsen/logrus"
 )
 
 type HTTPAPI struct {
@@ -22,9 +23,14 @@ func newHTTPAPI(n *Node) *HTTPAPI {
 	r.Get("/m", s.queryManifests)
 	r.Get("/d/{mID:\\d+}", s.getData)
 	r.Get("/d/{mID:\\d+}/{p}", s.getData)
-	r.Get("/ui", s.renderAll)
 	r.Get("/status", s.status)
-	r.Get("/", s.renderAll)
+
+	if n.getUIPath() != "" {
+		log.Info("serving ui from ", n.getUIPath())
+		uiHandler := http.FileServer(http.Dir(n.getUIPath()))
+		uiHandler = http.StripPrefix("/ui/", uiHandler)
+		r.Mount("/ui", uiHandler)
+	}
 
 	s.r = r
 	return s
