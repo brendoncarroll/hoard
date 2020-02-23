@@ -6,7 +6,7 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/simplemux"
 	"github.com/brendoncarroll/hoard/pkg/hoardproto"
-	"github.com/brendoncarroll/hoard/pkg/taggers"
+	"github.com/brendoncarroll/hoard/pkg/tagdb"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
@@ -40,8 +40,8 @@ func New(mux simplemux.Muxer, query Queryable, peerStore PeerStore) (*HoardNet, 
 	}, nil
 }
 
-func (hn *HoardNet) QueryPeers(ctx context.Context, tags taggers.TagSet, limit int) ([]*hoardproto.Manifest, error) {
-	mfs, err := hn.queryService.QueryRemotes(ctx, tags, limit)
+func (hn *HoardNet) QueryPeers(ctx context.Context, q tagdb.Query) ([]*hoardproto.Manifest, error) {
+	mfs, err := hn.queryService.QueryRemotes(ctx, q)
 	return mfs, err
 }
 

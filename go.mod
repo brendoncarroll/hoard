@@ -9,6 +9,7 @@ require (
 	github.com/brianolson/cbor_go v1.0.0
 	github.com/dhowden/tag v0.0.0-20191122115059-7e5c04feccd8
 	github.com/go-chi/chi v4.0.3+incompatible
+	github.com/gogo/protobuf v1.3.1
 	github.com/mewkiz/flac v1.0.6
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.4.2
