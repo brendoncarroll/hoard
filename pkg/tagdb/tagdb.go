@@ -1,8 +1,9 @@
-package hoard
+package tagdb
 
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"log"
 
 	"github.com/brendoncarroll/hoard/pkg/taggers"
@@ -28,7 +29,7 @@ type TagDB struct {
 	db *bolt.DB
 }
 
-func NewTagDB(db *bolt.DB) *TagDB {
+func NewDB(db *bolt.DB) *TagDB {
 	return &TagDB{db: db}
 }
 
@@ -45,7 +46,8 @@ func (tdb *TagDB) PutTag(ctx context.Context, entity uint64, key, value string) 
 
 		entityBytes := make([]byte, 8)
 		binary.BigEndian.PutUint64(entityBytes, entity)
-		if err := inverted.Put([]byte(value), entityBytes); err != nil {
+
+		if err := inverted.Put(invKey([]byte(value), entityBytes), nil); err != nil {
 			return err
 		}
 		if err := forward.Put(entityBytes, []byte(value)); err != nil {
@@ -70,7 +72,7 @@ func (tdb *TagDB) DeleteTag(ctx context.Context, entity uint64, key string) erro
 		binary.BigEndian.PutUint64(entityBytes, entity)
 
 		value := forward.Get(entityBytes)
-		if err := inverted.Delete([]byte(value)); err != nil {
+		if err := inverted.Delete(invKey(value, entityBytes)); err != nil {
 			return err
 		}
 		if err := forward.Delete(entityBytes); err != nil {
@@ -157,4 +159,27 @@ func bucketsForTag(tx *bolt.Tx, key string) (forward, inverted *bolt.Bucket, err
 		return nil, nil, err
 	}
 	return forward, inverted, nil
+}
+
+func bytesToID(buf []byte) uint64 {
+	return binary.BigEndian.Uint64(buf)
+}
+
+func idToBytes(x uint64) []byte {
+	buf := [8]byte{}
+	binary.BigEndian.PutUint64(buf[:], x)
+	return buf[:]
+}
+
+func invKey(value []byte, entitBytes []byte) []byte {
+	return append(value, entitBytes...)
+}
+
+func splitInvKey(key []byte) (id uint64, value []byte, err error) {
+	if len(key) < 9 {
+		return 0, nil, errors.New("invalid key for inverted bucket")
+	}
+	id = bytesToID(key[:8])
+	value = key[8:]
+	return id, key, nil
 }

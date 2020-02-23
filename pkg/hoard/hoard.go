@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -18,14 +17,17 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/simplemux"
 	"github.com/brendoncarroll/go-p2p/s/wlswarm"
-	"github.com/brendoncarroll/hoard/pkg/boltkv"
-	"github.com/brendoncarroll/hoard/pkg/fsbridge"
-	"github.com/brendoncarroll/hoard/pkg/hoardnet"
-	"github.com/brendoncarroll/hoard/pkg/taggers"
 	"github.com/brendoncarroll/webfs/pkg/webfsim"
 	"github.com/brendoncarroll/webfs/pkg/webref"
 	log "github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
+
+	"github.com/brendoncarroll/hoard/pkg/boltkv"
+	"github.com/brendoncarroll/hoard/pkg/fsbridge"
+	"github.com/brendoncarroll/hoard/pkg/hoardnet"
+	"github.com/brendoncarroll/hoard/pkg/hoardproto"
+	"github.com/brendoncarroll/hoard/pkg/tagdb"
+	"github.com/brendoncarroll/hoard/pkg/taggers"
 )
 
 const bucketManifests = "manifests"
@@ -44,7 +46,7 @@ type Node struct {
 	bcn *blobcache.Node
 
 	db    *bolt.DB
-	tagdb *TagDB
+	tagdb *tagdb.TagDB
 
 	suggestedCache sync.Map
 }
@@ -104,7 +106,7 @@ func New(params *Params) (*Node, error) {
 		// db
 		db: params.DB,
 
-		tagdb: NewTagDB(params.DB),
+		tagdb: tagdb.NewDB(params.DB),
 	}
 	n.hnet, err = hoardnet.New(mux, n, peerStore)
 	if err != nil {
@@ -228,25 +230,54 @@ func (n *Node) openFile(ctx context.Context, r webref.Ref, p string) (io.ReadSee
 	return nil, errors.New("cannot get data from webfs object")
 }
 
-func (n *Node) QueryManifests(ctx context.Context, tags taggers.TagSet, limit int) ([]uint64, error) {
-	// TODO: implement filtering
-	resultSet := []uint64{}
-	err := n.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bucketManifests))
+func (n *Node) QueryManifests(ctx context.Context, q tagdb.Query) (*ResultSet, error) {
+	tagRes, err := n.tagdb.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 
-		c := b.Cursor()
-		for k, _ := c.First(); k != nil; k, _ = c.Next() {
-			id := bytesToID(k)
-			resultSet = append(resultSet, id)
+	mfs := make([]*Manifest, len(tagRes.IDs))
+	for i := range tagRes.IDs {
+		mf, err := n.GetManifest(ctx, tagRes.IDs[i])
+		if err != nil {
+			return nil, err
 		}
-		return nil
-	})
+		mfs[i] = mf
+	}
+
+	resultSet := &ResultSet{
+		Manifests: mfs,
+
+		Offest: tagRes.Offset,
+		Count:  tagRes.Count,
+		Total:  tagRes.Total,
+	}
 	return resultSet, err
+}
+
+func (n *Node) QueryProtocol(ctx context.Context, q tagdb.Query) ([]*hoardproto.Manifest, error) {
+	tagRes, err := n.tagdb.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+
+	mfs := make([]*hoardproto.Manifest, len(tagRes.IDs))
+	for i := range tagRes.IDs {
+		mf, err := n.GetManifest(ctx, tagRes.IDs[i])
+		if err != nil {
+			return nil, err
+		}
+		pmf := mf.Manifest
+		mfs[i] = &pmf
+	}
+	return mfs, nil
 }
 
 func (n *Node) createManifest(ctx context.Context, ref *webref.Ref, pinSetName string) (*Manifest, error) {
 	mf := &Manifest{
-		WebRef:     ref,
+		Manifest: hoardproto.Manifest{
+			WebRef: ref,
+		},
 		PinSetName: pinSetName,
 	}
 
@@ -284,6 +315,9 @@ func (n *Node) createManifest(ctx context.Context, ref *webref.Ref, pinSetName s
 }
 
 func (n *Node) GetManifest(ctx context.Context, id uint64) (*Manifest, error) {
+	if id == 0 {
+		return nil, os.ErrNotExist
+	}
 	mf := &Manifest{}
 	err := n.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucketManifests))
@@ -303,9 +337,6 @@ func (n *Node) GetManifest(ctx context.Context, id uint64) (*Manifest, error) {
 		return nil, err
 	}
 	mf.Tags = tags
-	// suggested tags
-	// this can be slow
-	mf.SuggestedTags = n.suggestTags(ctx, mf.WebRef)
 
 	// pinset
 	pinSet, err := n.bcn.GetPinSet(ctx, mf.PinSetName)
@@ -321,54 +352,76 @@ func (n *Node) GetManifest(ctx context.Context, id uint64) (*Manifest, error) {
 	return mf, nil
 }
 
-func (n *Node) ListManifests(ctx context.Context, start, count int) ([]uint64, error) {
-	ids := []uint64{}
-	err := n.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bucketManifests))
-		if b == nil {
-			return nil
-		}
-
-		c := b.Cursor()
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			if v == nil {
-				continue
-			}
-			id := bytesToID(k)
-			ids = append(ids, id)
-		}
-		return nil
+func (n *Node) ListManifests(ctx context.Context, offset, limit int) (*ResultSet, error) {
+	// TODO: offset is not supported, because there is no sorting.
+	return n.QueryManifests(ctx, tagdb.Query{
+		Limit: limit,
 	})
-	return ids, err
 }
 
 func (n *Node) GetTag(ctx context.Context, mID uint64, name string) (string, error) {
 	return n.tagdb.GetTag(ctx, mID, name)
 }
 
-func (n *Node) Serve(ctx context.Context, laddr string) error {
-	log.Debug("Serving UI on ", laddr, "...")
-	hapi := newHTTPAPI(n)
-	return http.ListenAndServe(laddr, hapi)
+// List Peers returns a list of the ids for every peer in the peer store
+func (n *Node) ListPeers(ctx context.Context) ([]p2p.PeerID, error) {
+	return n.peerStore.ListPeers(), nil
 }
 
-func (n *Node) suggestTags(ctx context.Context, ref *webref.Ref) taggers.TagSet {
+// Get Peer returns the peer info for the peer with the given id
+func (n *Node) GetPeer(ctx context.Context, id p2p.PeerID) (*PeerInfo, error) {
+	return n.peerStore.GetPeerInfo(id)
+}
+
+// PutPeer replaces the pinfo for the peer with ID == pinfo.ID
+func (n *Node) PutPeer(ctx context.Context, pinfo *PeerInfo) error {
+	return n.peerStore.PutPeerInfo(pinfo)
+}
+
+// DeletePeer deletes the peer's info from the node
+func (n *Node) DeletePeer(ctx context.Context, id p2p.PeerID) error {
+	return n.peerStore.DeletePeer(id)
+}
+
+func (n *Node) SuggestTags(ctx context.Context, id uint64) (taggers.TagSet, error) {
+	mf, err := n.GetManifest(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	ref := mf.WebRef
+
 	v, exists := n.suggestedCache.Load(ref.String())
 	if exists {
-		return v.(taggers.TagSet)
+		return v.(taggers.TagSet), nil
 	}
 	rc, err := n.openFile(ctx, *ref, "")
 	if err != nil {
-		log.Println(err)
-		return nil
+		return nil, err
 	}
 	tags := make(taggers.TagSet)
 	if err := taggers.SuggestTags(rc, tags); err != nil {
-		log.Println(err)
-		return nil
+		return nil, err
 	}
+
 	n.suggestedCache.Store(ref.String(), tags)
-	return tags
+	return tags, nil
+}
+
+func (n *Node) Close() error {
+	errs := []error{
+		n.db.Close(),
+		n.hnet.Close(),
+	}
+	found := false
+	for _, err := range errs {
+		if err != nil {
+			found = true
+		}
+	}
+	if found {
+		return fmt.Errorf("errors closing: %v", errs)
+	}
+	return nil
 }
 
 func (n *Node) getUIPath() string {

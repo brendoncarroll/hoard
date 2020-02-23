@@ -65,6 +65,15 @@ func (ps *PeerStore) GetPeerInfo(id p2p.PeerID) (*PeerInfo, error) {
 	return pinfo, nil
 }
 
+func (ps *PeerStore) DeletePeer(id p2p.PeerID) error {
+	err := ps.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketPeers))
+		b.Delete(id[:])
+		return nil
+	})
+	return err
+}
+
 func (ps *PeerStore) update(id p2p.PeerID, fn func(x *PeerInfo) PeerInfo) error {
 	err := ps.db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(bucketPeers))

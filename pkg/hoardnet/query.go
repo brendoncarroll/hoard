@@ -9,12 +9,12 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/hoard/pkg/hoardproto"
-	"github.com/brendoncarroll/hoard/pkg/taggers"
+	"github.com/brendoncarroll/hoard/pkg/tagdb"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
-	DefaultMaxHops  = 3
+	DefaultMaxHops  = 1
 	DefaultMaxCount = 30
 )
 
@@ -23,8 +23,7 @@ type QueryRes = hoardproto.QueryRes
 type Manifest = hoardproto.Manifest
 
 type Queryable interface {
-	QueryManifests(ctx context.Context, tags taggers.TagSet, limit int) ([]uint64, error)
-	GetManifest(ctx context.Context, id uint64) (*hoardproto.Manifest, error)
+	QueryProtocol(ctx context.Context, q tagdb.Query) ([]*hoardproto.Manifest, error)
 }
 
 type QueryService struct {
@@ -45,19 +44,18 @@ func NewQueryService(query Queryable, peerStore PeerStore, s p2p.SecureAskSwarm)
 	return qs
 }
 
-func (qs *QueryService) QueryRemotes(ctx context.Context, tags map[string]string, limit int) ([]*hoardproto.Manifest, error) {
-	if qs.maxCount < limit {
-		limit = qs.maxCount
+func (qs *QueryService) QueryRemotes(ctx context.Context, q tagdb.Query) ([]*hoardproto.Manifest, error) {
+	if qs.maxCount < q.Limit {
+		q.Limit = qs.maxCount
 	}
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		deadline = time.Now().Add(5 * time.Second)
 	}
 	req := &QueryReq{
-		MatchTags: tags,
-		Limit:     limit,
-		Hops:      qs.maxHops,
-		Deadline:  deadline,
+		Limit:    q.Limit,
+		Hops:     qs.maxHops,
+		Deadline: deadline,
 	}
 
 	mfs, err := qs.queryAll(ctx, p2p.ZeroPeerID(), req)
@@ -174,19 +172,10 @@ func (qs *QueryService) handleAsk(ctx context.Context, m *p2p.Message, w io.Writ
 }
 
 func (qs *QueryService) queryLocal(ctx context.Context, req hoardproto.QueryReq) []*Manifest {
-	ids, err := qs.local.QueryManifests(ctx, req.MatchTags, req.Limit)
+	mfs, err := qs.local.QueryProtocol(ctx, req.Query)
 	if err != nil {
 		log.Error(err)
 		return nil
-	}
-	mfs := make([]*Manifest, 0, len(ids))
-	for _, id := range ids {
-		mf, err := qs.local.GetManifest(ctx, id)
-		if err != nil {
-			log.Error(err)
-			continue
-		}
-		mfs = append(mfs, mf)
 	}
 	return mfs
 }

@@ -1,6 +1,9 @@
 package hoardcmd
 
 import (
+	"net/http"
+
+	"github.com/brendoncarroll/hoard/pkg/hoardhttp"
 	"github.com/spf13/cobra"
 )
 
@@ -21,6 +24,7 @@ var runCmd = &cobra.Command{
 		if err := cmd.ParseFlags(args); err != nil {
 			return err
 		}
-		return h.Serve(ctx, uiAddr)
+		s := hoardhttp.New(h, uiDir)
+		return http.ListenAndServe(uiAddr, s)
 	},
 }

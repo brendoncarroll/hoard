@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/brendoncarroll/hoard/pkg/hoardproto"
 	"github.com/brendoncarroll/webfs/pkg/webref"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,8 +12,10 @@ import (
 
 func TestMarshal(t *testing.T) {
 	mf := Manifest{
-		WebRef: &webref.Ref{
-			Ref: &webref.Ref_Url{"test://test_url"},
+		Manifest: hoardproto.Manifest{
+			WebRef: &webref.Ref{
+				Ref: &webref.Ref_Url{"test://test_url"},
+			},
 		},
 	}
 	data, err := json.Marshal(mf)
