@@ -54,6 +54,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func httpSuccess(w http.ResponseWriter, x interface{}) {
+	w.Header().Add("Content-Type", "application/json")
 	data, err := json.Marshal(x)
 	if err != nil {
 		panic(err)

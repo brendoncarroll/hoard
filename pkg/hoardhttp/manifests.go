@@ -9,7 +9,6 @@ import (
 
 	"github.com/brendoncarroll/hoard/pkg/tagdb"
 	"github.com/go-chi/chi"
-	log "github.com/sirupsen/logrus"
 )
 
 func (s *Server) getManifest(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +44,6 @@ func (s *Server) queryManifests(w http.ResponseWriter, r *http.Request) {
 	if httpErr(w, err) {
 		return
 	}
-	log.Println("got results", results)
 	httpSuccess(w, results)
 }
 

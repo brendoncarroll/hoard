@@ -315,6 +315,9 @@ func (n *Node) createManifest(ctx context.Context, ref *webref.Ref, pinSetName s
 }
 
 func (n *Node) GetManifest(ctx context.Context, id uint64) (*Manifest, error) {
+	if id == 0 {
+		return nil, os.ErrNotExist
+	}
 	mf := &Manifest{}
 	err := n.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucketManifests))
@@ -402,6 +405,23 @@ func (n *Node) SuggestTags(ctx context.Context, id uint64) (taggers.TagSet, erro
 
 	n.suggestedCache.Store(ref.String(), tags)
 	return tags, nil
+}
+
+func (n *Node) Close() error {
+	errs := []error{
+		n.db.Close(),
+		n.hnet.Close(),
+	}
+	found := false
+	for _, err := range errs {
+		if err != nil {
+			found = true
+		}
+	}
+	if found {
+		return fmt.Errorf("errors closing: %v", errs)
+	}
+	return nil
 }
 
 func (n *Node) getUIPath() string {
