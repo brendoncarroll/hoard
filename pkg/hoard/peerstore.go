@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/brendoncarroll/blobcache/pkg/blobnet"
+	"github.com/blobcache/blobcache/pkg/blobnet/peers"
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
-var _ blobnet.PeerStore = &PeerStore{}
+var _ peers.PeerStore = &PeerStore{}
 
 const bucketPeers = "peers"
 

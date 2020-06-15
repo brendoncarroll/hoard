@@ -6,8 +6,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/brendoncarroll/blobcache/pkg/blobcache"
-	"github.com/brendoncarroll/blobcache/pkg/blobs"
+	"github.com/blobcache/blobcache/pkg/blobcache"
 	"github.com/brendoncarroll/webfs/pkg/webfsim"
 	"github.com/brendoncarroll/webfs/pkg/webref"
 )
@@ -15,8 +14,8 @@ import (
 const bcPrefix = "bc://"
 
 type bcstore struct {
-	pinSetName string
-	bcn        *blobcache.Node
+	pinset blobcache.PinSetID
+	bcn    *blobcache.Node
 }
 
 type rwStore struct {
@@ -33,16 +32,21 @@ func (s bcstore) Get(ctx context.Context, key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := blobs.ID{}
-	copy(id[:], idBytes)
-	return s.bcn.Get(ctx, id)
+	var data []byte
+	if err := s.bcn.GetF(ctx, idBytes, func(x []byte) error {
+		data = append([]byte{}, x...)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func (s bcstore) Post(ctx context.Context, prefix string, data []byte) (string, error) {
 	if prefix != "" {
 		return "", errors.New("prefix must be empty")
 	}
-	id, err := s.bcn.Post(ctx, s.pinSetName, data)
+	id, err := s.bcn.Post(ctx, s.pinset, data)
 	if err != nil {
 		return "", err
 	}
@@ -54,11 +58,11 @@ func (s bcstore) MaxBlobSize() int {
 	return s.bcn.MaxBlobSize()
 }
 
-func makeStore(bcn *blobcache.Node, pinSetName string) webfsim.ReadPost {
+func makeStore(bcn *blobcache.Node, pinset blobcache.PinSetID) webfsim.ReadPost {
 	s1 := &webref.BasicStore{
 		Store: bcstore{
-			pinSetName: pinSetName,
-			bcn:        bcn,
+			pinset: pinset,
+			bcn:    bcn,
 		},
 	}
 	return &rwStore{

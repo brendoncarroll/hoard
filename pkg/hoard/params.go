@@ -22,10 +22,11 @@ type Params struct {
 	Swarm p2p.SecureAskSwarm
 	DB    *bolt.DB
 
-	BlobcacheDB *bolt.DB
-	Capacity    uint64
-	SourcePaths []string
-	UIPath      string
+	BlobcachePersist   *bolt.DB
+	BlobcacheEphemeral *bolt.DB
+	Capacity           uint64
+	SourcePaths        []string
+	UIPath             string
 }
 
 func DefaultParams(dirpath string, sourcePaths []string, uiPath string) (*Params, error) {
@@ -65,7 +66,11 @@ func DefaultParams(dirpath string, sourcePaths []string, uiPath string) (*Params
 	log.Info("connected to db", db.Path())
 
 	// setup blobcache database
-	bdb, err := bolt.Open(filepath.Join(dirpath, "blobcache.db"), 0644, nil)
+	persistDB, err := bolt.Open(filepath.Join(dirpath, "blobcache_persist.db"), 0644, nil)
+	if err != nil {
+		return nil, err
+	}
+	ephemDB, err := bolt.Open(filepath.Join(dirpath, "blobcache_ephemeral.db"), 0644, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -77,12 +82,13 @@ func DefaultParams(dirpath string, sourcePaths []string, uiPath string) (*Params
 	}
 
 	return &Params{
-		Swarm:       swarm1.(p2p.SecureAskSwarm),
-		DB:          db,
-		BlobcacheDB: bdb,
-		Capacity:    1e5, // about 6 GB
-		SourcePaths: sourcePaths,
-		UIPath:      uiPath,
+		Swarm:              swarm1.(p2p.SecureAskSwarm),
+		DB:                 db,
+		BlobcachePersist:   persistDB,
+		BlobcacheEphemeral: ephemDB,
+		Capacity:           1e5, // about 6 GB
+		SourcePaths:        sourcePaths,
+		UIPath:             uiPath,
 	}, nil
 }
 

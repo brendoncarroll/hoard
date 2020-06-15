@@ -12,8 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brendoncarroll/blobcache/pkg/blobcache"
-	"github.com/brendoncarroll/blobcache/pkg/blobs"
+	"github.com/blobcache/blobcache/pkg/bcstate"
+	"github.com/blobcache/blobcache/pkg/blobcache"
+	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/simplemux"
 	"github.com/brendoncarroll/go-p2p/s/wlswarm"
@@ -76,22 +77,13 @@ func New(params *Params) (*Node, error) {
 	swarm := wlswarm.WrapSecureAsk(params.Swarm, peerStore.Contains)
 	mux := simplemux.MultiplexSwarm(swarm)
 
-	// blobcache
-	cache, err := blobcache.NewBoltKV(params.BlobcacheDB, []byte("data"), params.Capacity)
-	if err != nil {
-		return nil, err
-	}
-
-	bcn, err := blobcache.NewNode(blobcache.Params{
+	bcn := blobcache.NewNode(blobcache.Params{
 		Mux:             mux,
 		PeerStore:       peerStore,
-		MetadataDB:      params.BlobcacheDB,
-		Cache:           cache,
+		Persistent:      bcstate.NewBoltDB(params.BlobcachePersist),
+		Ephemeral:       bcstate.NewBoltDB(params.BlobcacheEphemeral),
 		ExternalSources: extSources,
 	})
-	if err != nil {
-		return nil, err
-	}
 
 	n := &Node{
 		params: *params,
@@ -108,6 +100,7 @@ func New(params *Params) (*Node, error) {
 
 		tagdb: tagdb.NewDB(params.DB),
 	}
+	var err error
 	n.hnet, err = hoardnet.New(mux, n, peerStore)
 	if err != nil {
 		return nil, err
@@ -124,11 +117,11 @@ func (n *Node) AddFile(ctx context.Context, p string) (*Manifest, error) {
 		return nil, err
 	}
 
-	pinSetName := n.genPinSetName()
-	if err := n.bcn.CreatePinSet(ctx, pinSetName); err != nil {
+	pinSetID, err := n.bcn.CreatePinSet(ctx, "")
+	if err != nil {
 		return nil, err
 	}
-	s := makeStore(n.bcn, pinSetName)
+	s := makeStore(n.bcn, pinSetID)
 	wf, err := webfsim.FileFromReader(ctx, s, f)
 	if err != nil {
 		return nil, err
@@ -142,7 +135,7 @@ func (n *Node) AddFile(ctx context.Context, p string) (*Manifest, error) {
 		return nil, err
 	}
 
-	mf, err := n.createManifest(ctx, ref, pinSetName)
+	mf, err := n.createManifest(ctx, ref, pinSetID)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +212,7 @@ func (n *Node) GetData(ctx context.Context, id uint64, p string) (io.ReadSeeker,
 
 func (n *Node) openFile(ctx context.Context, r webref.Ref, p string) (io.ReadSeeker, error) {
 	o := &webfsim.Object{}
-	s := makeStore(n.bcn, "")
+	s := makeStore(n.bcn, 0)
 	if err := webref.GetAndDecode(ctx, s, r, o); err != nil {
 		return nil, err
 	}
@@ -273,12 +266,12 @@ func (n *Node) QueryProtocol(ctx context.Context, q tagdb.Query) ([]*hoardproto.
 	return mfs, nil
 }
 
-func (n *Node) createManifest(ctx context.Context, ref *webref.Ref, pinSetName string) (*Manifest, error) {
+func (n *Node) createManifest(ctx context.Context, ref *webref.Ref, pinSetID blobcache.PinSetID) (*Manifest, error) {
 	mf := &Manifest{
 		Manifest: hoardproto.Manifest{
 			WebRef: ref,
 		},
-		PinSetName: pinSetName,
+		PinSetID: pinSetID,
 	}
 
 	err := n.db.Update(func(tx *bolt.Tx) error {
@@ -339,7 +332,7 @@ func (n *Node) GetManifest(ctx context.Context, id uint64) (*Manifest, error) {
 	mf.Tags = tags
 
 	// pinset
-	pinSet, err := n.bcn.GetPinSet(ctx, mf.PinSetName)
+	pinSet, err := n.bcn.GetPinSet(ctx, mf.PinSetID)
 	if err != nil {
 		return nil, err
 	}

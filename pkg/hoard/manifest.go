@@ -1,7 +1,8 @@
 package hoard
 
 import (
-	"github.com/brendoncarroll/blobcache/pkg/blobs"
+	"github.com/blobcache/blobcache/pkg/blobcache"
+	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/hoard/pkg/hoardproto"
 )
 
@@ -9,8 +10,8 @@ type Manifest struct {
 	hoardproto.Manifest
 
 	// blobcache
-	PinSetName string    `json:"pinset_name"`
-	PinSetRoot *blobs.ID `json:"pinset_root"`
+	PinSetID   blobcache.PinSetID `json:"pinset_id"`
+	PinSetRoot *blobs.ID          `json:"pinset_root"`
 }
 
 type ResultSet struct {

@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/brendoncarroll/blobcache/pkg/blobs"
+	"github.com/blobcache/blobcache/pkg/blobs"
 	cbor "github.com/brianolson/cbor_go"
 	log "github.com/sirupsen/logrus"
 )
@@ -95,27 +94,32 @@ func (b *Bridge) Index(ctx context.Context, p string) (err error) {
 	return nil
 }
 
-func (b *Bridge) Get(ctx context.Context, id blobs.ID) ([]byte, error) {
+func (b *Bridge) GetF(ctx context.Context, id blobs.ID, fn func([]byte) error) error {
 	ent, err := b.getEntry(id)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if ent == nil {
-		return nil, blobs.ErrNotFound
+		return blobs.ErrNotFound
 	}
 
 	f, err := os.Open(ent.Path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer f.Close()
 
 	if _, err := f.Seek(ent.Offset, io.SeekStart); err != nil {
-		return nil, err
+		return err
 	}
 
 	r := io.LimitReader(f, int64(ent.Length))
-	return ioutil.ReadAll(r)
+	data := make([]byte, ent.Length)
+	_, err = io.ReadFull(r, data)
+	if err != nil {
+		return err
+	}
+	return fn(data)
 }
 
 func (b *Bridge) Exists(ctx context.Context, id blobs.ID) (bool, error) {
