@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/blobcache/blobcache/pkg/blobcache"
+	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/webfs/pkg/webfsim"
 	"github.com/brendoncarroll/webfs/pkg/webref"
 )
@@ -28,12 +29,12 @@ func (s bcstore) Get(ctx context.Context, key string) ([]byte, error) {
 		return nil, errors.New("must have blobcache prefix")
 	}
 	key = key[len(bcPrefix):]
-	idBytes, err := base64.RawURLEncoding.DecodeString(key)
-	if err != nil {
+	id := blobs.ID{}
+	if err := id.UnmarshalB64([]byte(key)); err != nil {
 		return nil, err
 	}
 	var data []byte
-	if err := s.bcn.GetF(ctx, idBytes, func(x []byte) error {
+	if err := s.bcn.GetF(ctx, id, func(x []byte) error {
 		data = append([]byte{}, x...)
 		return nil
 	}); err != nil {

@@ -22,13 +22,13 @@ type HoardNet struct {
 }
 
 func New(mux simplemux.Muxer, query Queryable, peerStore PeerStore) (*HoardNet, error) {
-	healthSwarm, err := mux.OpenChannel(HealthChannel)
+	healthSwarm, err := mux.OpenSecureAsk(HealthChannel)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't open health channel")
 	}
 	hs := NewHealthcheck(healthSwarm.(p2p.AskSwarm), peerStore)
 
-	querySwarm, err := mux.OpenChannel(QueryChannel)
+	querySwarm, err := mux.OpenSecureAsk(QueryChannel)
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't open search channel on mux")
 	}
