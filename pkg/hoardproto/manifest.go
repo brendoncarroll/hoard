@@ -7,9 +7,8 @@ import (
 
 	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/go-p2p"
+	"github.com/brendoncarroll/hoard/pkg/hoardfile"
 	"github.com/brendoncarroll/hoard/pkg/taggers"
-	"github.com/brendoncarroll/webfs/pkg/webref"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -28,7 +27,7 @@ func (fqid FQID) String() string {
 type Manifest struct {
 	Peer      p2p.PeerID     `json:"peer,omitempty"`
 	ID        uint64         `json:"id"`
-	WebRef    *webref.Ref    `json:"webref"`
+	File      hoardfile.File `json:"file"`
 	BlobCount uint64         `json:"blob_count"`
 	Tags      taggers.TagSet `json:"tags"`
 }
@@ -45,16 +44,15 @@ func (mf Manifest) FQID() FQID {
 }
 
 func (mf Manifest) Fingerprint() Fingerprint {
-	data, _ := proto.Marshal(mf.WebRef)
-	return blobs.Hash(data)
+	return mf.File.Root.ID
 }
 
 const ManifestPEMType = "HOARD MANIFEST"
 
 func (mf Manifest) Share() string {
 	x := struct {
-		WebRef *webref.Ref `json:"webref"`
-	}{mf.WebRef}
+		File hoardfile.File `json:"file"`
+	}{mf.File}
 	data, err := json.Marshal(x)
 	if err != nil {
 		panic(err)

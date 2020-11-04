@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,13 +17,12 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/simplemux"
 	"github.com/brendoncarroll/go-p2p/s/wlswarm"
-	"github.com/brendoncarroll/webfs/pkg/webfsim"
-	"github.com/brendoncarroll/webfs/pkg/webref"
 	log "github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 
 	"github.com/brendoncarroll/hoard/pkg/boltkv"
 	"github.com/brendoncarroll/hoard/pkg/fsbridge"
+	"github.com/brendoncarroll/hoard/pkg/hoardfile"
 	"github.com/brendoncarroll/hoard/pkg/hoardnet"
 	"github.com/brendoncarroll/hoard/pkg/hoardproto"
 	"github.com/brendoncarroll/hoard/pkg/tagdb"
@@ -53,7 +51,7 @@ type Node struct {
 }
 
 func New(params *Params) (*Node, error) {
-	extSources := []blobs.Getter{}
+	extSources := []blobcache.Source{}
 	bridges := []*fsbridge.Bridge{}
 	for _, p := range params.SourcePaths {
 		bucketName := "fsbridge"
@@ -79,9 +77,10 @@ func New(params *Params) (*Node, error) {
 
 	bcn := blobcache.NewNode(blobcache.Params{
 		Mux:             mux,
+		PrivateKey:      params.PrivateKey,
 		PeerStore:       peerStore,
-		Persistent:      bcstate.NewBoltDB(params.BlobcachePersist),
-		Ephemeral:       bcstate.NewBoltDB(params.BlobcacheEphemeral),
+		Persistent:      bcstate.NewBoltDB(params.BlobcachePersist, params.Capacity*19/20),
+		Ephemeral:       bcstate.NewBoltDB(params.BlobcacheEphemeral, params.Capacity*1/20),
 		ExternalSources: extSources,
 	})
 
@@ -121,21 +120,13 @@ func (n *Node) AddFile(ctx context.Context, p string) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := makeStore(n.bcn, pinSetID)
-	wf, err := webfsim.FileFromReader(ctx, s, f)
-	if err != nil {
-		return nil, err
-	}
-	o := &webfsim.Object{
-		Value: &webfsim.Object_File{wf},
-	}
-	ctx = webref.SetCodecCtx(ctx, webref.CodecProtobuf)
-	ref, err := webref.EncodeAndPost(ctx, s, o)
+	s := newStore(n.bcn, pinSetID)
+	hf, err := hoardfile.Create(ctx, s, f)
 	if err != nil {
 		return nil, err
 	}
 
-	mf, err := n.createManifest(ctx, ref, pinSetID)
+	mf, err := n.createManifest(ctx, *hf, pinSetID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,21 +198,22 @@ func (n *Node) GetData(ctx context.Context, id uint64, p string) (io.ReadSeeker,
 	if err != nil {
 		return nil, err
 	}
-	return n.openFile(ctx, *mf.WebRef, p)
+	s := newStore(n.bcn, 0)
+	return hoardfile.NewReader(ctx, s, mf.File), nil
 }
 
-func (n *Node) openFile(ctx context.Context, r webref.Ref, p string) (io.ReadSeeker, error) {
-	o := &webfsim.Object{}
-	s := makeStore(n.bcn, 0)
-	if err := webref.GetAndDecode(ctx, s, r, o); err != nil {
-		return nil, err
-	}
-	if o.GetFile() != nil {
-		fr := webfsim.NewFileReader(s, o.GetFile())
-		return fr, nil
-	}
-	return nil, errors.New("cannot get data from webfs object")
-}
+// func (n *Node) openFile(ctx context.Context, r webref.Ref, p string) (io.ReadSeeker, error) {
+// 	o := &webfsim.Object{}
+// 	s := makeStore(n.bcn, 0)
+// 	if err := webref.GetAndDecode(ctx, s, r, o); err != nil {
+// 		return nil, err
+// 	}
+// 	if o.GetFile() != nil {
+// 		fr := webfsim.NewFileReader(s, o.GetFile())
+// 		return fr, nil
+// 	}
+// 	return nil, errors.New("cannot get data from webfs object")
+// }
 
 func (n *Node) QueryManifests(ctx context.Context, q tagdb.Query) (*ResultSet, error) {
 	tagRes, err := n.tagdb.Query(ctx, q)
@@ -266,10 +258,10 @@ func (n *Node) QueryProtocol(ctx context.Context, q tagdb.Query) ([]*hoardproto.
 	return mfs, nil
 }
 
-func (n *Node) createManifest(ctx context.Context, ref *webref.Ref, pinSetID blobcache.PinSetID) (*Manifest, error) {
+func (n *Node) createManifest(ctx context.Context, file hoardfile.File, pinSetID blobcache.PinSetID) (*Manifest, error) {
 	mf := &Manifest{
 		Manifest: hoardproto.Manifest{
-			WebRef: ref,
+			File: file,
 		},
 		PinSetID: pinSetID,
 	}
@@ -381,22 +373,18 @@ func (n *Node) SuggestTags(ctx context.Context, id uint64) (taggers.TagSet, erro
 	if err != nil {
 		return nil, err
 	}
-	ref := mf.WebRef
-
-	v, exists := n.suggestedCache.Load(ref.String())
+	cacheKey := mf.File.Root
+	v, exists := n.suggestedCache.Load(cacheKey)
 	if exists {
 		return v.(taggers.TagSet), nil
 	}
-	rc, err := n.openFile(ctx, *ref, "")
-	if err != nil {
-		return nil, err
-	}
+	s := newStore(n.bcn, mf.PinSetID)
+	r := hoardfile.NewReader(ctx, s, mf.File)
 	tags := make(taggers.TagSet)
-	if err := taggers.SuggestTags(rc, tags); err != nil {
+	if err := taggers.SuggestTags(r, tags); err != nil {
 		return nil, err
 	}
-
-	n.suggestedCache.Store(ref.String(), tags)
+	n.suggestedCache.Store(cacheKey, tags)
 	return tags, nil
 }
 

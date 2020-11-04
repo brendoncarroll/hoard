@@ -19,8 +19,9 @@ import (
 )
 
 type Params struct {
-	Swarm p2p.SecureAskSwarm
-	DB    *bolt.DB
+	Swarm      p2p.SecureAskSwarm
+	DB         *bolt.DB
+	PrivateKey p2p.PrivateKey
 
 	BlobcachePersist   *bolt.DB
 	BlobcacheEphemeral *bolt.DB
@@ -63,7 +64,7 @@ func DefaultParams(dirpath string, sourcePaths []string, uiPath string) (*Params
 	if err != nil {
 		return nil, err
 	}
-	log.Info("connected to db", db.Path())
+	log.Info("connected to db ", db.Path())
 
 	// setup blobcache database
 	persistDB, err := bolt.Open(filepath.Join(dirpath, "blobcache_persist.db"), 0644, nil)
@@ -89,6 +90,7 @@ func DefaultParams(dirpath string, sourcePaths []string, uiPath string) (*Params
 		Capacity:           1e5, // about 6 GB
 		SourcePaths:        sourcePaths,
 		UIPath:             uiPath,
+		PrivateKey:         privKey,
 	}, nil
 }
 

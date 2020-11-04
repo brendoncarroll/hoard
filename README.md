@@ -1,6 +1,6 @@
 # Hoard
 
-Hoard is a tag oriented content management system built on top of the [blobcache](https://github.com/blobcache/blobcache) storage network using the file and directory structures from [WebFS](https://github.com/brendoncarroll/webfs).
+Hoard is a tag oriented content management system built on top of the [blobcache](https://github.com/blobcache/blobcache) storage network.
 
 Hoard aims to let normal non-technical users organize content, share files, and coordinate group archival.
 
@@ -8,16 +8,15 @@ Hoard is *only* for content you want to share with peers.
 **DO NOT** use Hoard for personal data, or data that you are not allowed to distribute.
 
 ## How It Works
-When a file is imported into Hoard, its data is encrypted using a convergent key and stored in blobcache.
+When a file is imported into Hoard, its data is encrypted using convergent keys and stored in blobcache.
 Metadata linking to the data blobs is also created and encrypted.
-All this functionality is provided by WebFS.
-WebFS spits out a small amount of data (called a `WebRef`) which is a reference, transitively, to this entire structure.
+Eventually this process produces a root reference, which is a reference, transitively, to this entire structure.
 
-Next, Hoard creates a `Manifest` with the `WebRef` and adds some default tags, like the filename.
+Next, Hoard creates a `Manifest` with the file and adds some default tags, like the filename.
 Hoard will even suggest tags extracted from common formats like mp3 and flac.
 A Hoard Node makes all its manifests searchable by tag to its one hop peers.
 
-Although blobcache blobs are available to anyone who requests them, they are encrypted and cannot be decrypted without a `Manifest`.
+Although blobcache blobs are available to anyone who requests them, they are encrypted and cannot be decrypted without information from a `Manifest`.
 This means that the content available to you is the content on your and your peers' nodes. But when it comes time to pull that content down to your node, it is pulled from the blobcache network as a whole, not just the node that gave you the manifest.
 
 You could also get a manifest via another channel like email, or instant messaging. You would be able to pull it down to your node, even if your one-hop nodes didn't have it, as long as it was reachable through blobcache.

@@ -51,7 +51,7 @@ func New(params Params) *Bridge {
 	b := &Bridge{
 		kv:         params.KV,
 		path:       p,
-		transform:  WebFSTransform,
+		transform:  HoardFileTransform,
 		cf:         cf,
 		scanPeriod: params.ScanPeriod,
 	}
@@ -131,6 +131,7 @@ func (b *Bridge) Exists(ctx context.Context, id blobs.ID) (bool, error) {
 }
 
 func (b *Bridge) List(ctx context.Context, prefix []byte, ids []blobs.ID) (n int, err error) {
+	// TODO: depend on KV store interface
 	return 0, nil
 }
 
