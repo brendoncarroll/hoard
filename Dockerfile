@@ -4,7 +4,7 @@ WORKDIR /app
 COPY ./ui .
 RUN yarn build
 
-FROM golang:1.13 as go_builder
+FROM golang:1.15 as go_builder
 WORKDIR /app
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go install -v ./cmd/hoard
