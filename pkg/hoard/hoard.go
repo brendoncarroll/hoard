@@ -202,19 +202,6 @@ func (n *Node) GetData(ctx context.Context, id uint64, p string) (io.ReadSeeker,
 	return hoardfile.NewReader(ctx, s, mf.File), nil
 }
 
-// func (n *Node) openFile(ctx context.Context, r webref.Ref, p string) (io.ReadSeeker, error) {
-// 	o := &webfsim.Object{}
-// 	s := makeStore(n.bcn, 0)
-// 	if err := webref.GetAndDecode(ctx, s, r, o); err != nil {
-// 		return nil, err
-// 	}
-// 	if o.GetFile() != nil {
-// 		fr := webfsim.NewFileReader(s, o.GetFile())
-// 		return fr, nil
-// 	}
-// 	return nil, errors.New("cannot get data from webfs object")
-// }
-
 func (n *Node) QueryManifests(ctx context.Context, q tagdb.Query) (*ResultSet, error) {
 	tagRes, err := n.tagdb.Query(ctx, q)
 	if err != nil {
