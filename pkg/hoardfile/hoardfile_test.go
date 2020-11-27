@@ -45,6 +45,7 @@ func TestCreateRead(t *testing.T) {
 		blobs.MaxSize*BranchingFactor + 1,
 		blobs.MaxSize*BranchingFactor - 1,
 	} {
+		size := size
 		t.Run(fmt.Sprintf("CreateRead-%d", size), func(t *testing.T) {
 			testCreateRead(t, size)
 		})

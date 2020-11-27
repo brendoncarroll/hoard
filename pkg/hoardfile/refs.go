@@ -2,8 +2,8 @@ package hoardfile
 
 import (
 	"context"
-	"encoding/base64"
 
+	"github.com/blobcache/blobcache/pkg/bccrypto"
 	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/chacha20"
@@ -11,20 +11,9 @@ import (
 
 const RefSize = blobs.IDSize + chacha20.KeySize
 
-type DEK [32]byte
-
-func (dek DEK) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + base64.RawURLEncoding.EncodeToString(dek[:]) + `"`), nil
-}
-
-func (dek *DEK) UnmarshalJSON(data []byte) error {
-	_, err := base64.RawURLEncoding.Decode(dek[:], data[1:len(data)-1])
-	return err
-}
-
 type Ref struct {
-	ID  blobs.ID `json:"id"`
-	DEK DEK      `json:"dek"`
+	ID  blobs.ID     `json:"id"`
+	DEK bccrypto.DEK `json:"dek"`
 }
 
 func RefFromBytes(x []byte) (*Ref, error) {
@@ -38,26 +27,22 @@ func RefFromBytes(x []byte) (*Ref, error) {
 }
 
 func post(ctx context.Context, s blobs.Poster, ptext []byte) (*Ref, error) {
-	ctext := make([]byte, len(ptext))
-	dek := blobs.Hash(ptext)
-	CryptoXOR(dek[:], ctext, ptext)
-	id, err := s.Post(ctx, ctext)
+	id, dek, err := bccrypto.Post(ctx, s, bccrypto.Convergent, ptext)
 	if err != nil {
 		return nil, err
 	}
-	return &Ref{ID: id, DEK: DEK(dek)}, nil
+	return &Ref{
+		ID:  id,
+		DEK: *dek,
+	}, nil
 }
 
 func getF(ctx context.Context, s blobs.Getter, ref Ref, fn func([]byte) error) error {
-	return s.GetF(ctx, ref.ID, func(ctext []byte) error {
-		ptext := make([]byte, len(ctext))
-		CryptoXOR(ref.DEK[:], ptext, ctext)
-		return fn(ptext)
-	})
+	return bccrypto.GetF(ctx, s, ref.DEK, ref.ID, fn)
 }
 
-func DeriveKey(ptext []byte) [32]byte {
-	return blobs.Hash(ptext)
+func DeriveKey(ptext []byte) bccrypto.DEK {
+	return bccrypto.Convergent(blobs.Hash(ptext))
 }
 
 func CryptoXOR(key, dst, src []byte) {

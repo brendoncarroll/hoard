@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/alangpierce/go-forceexport v0.0.0-20160317203124-8f1d6941cd75 // indirect
-	github.com/blobcache/blobcache v0.0.0-20201018013000-87bb905b063f
+	github.com/blobcache/blobcache v0.0.0-20201127192231-ba90a01e7601
 	github.com/brendoncarroll/go-p2p v0.0.0-20201022031311-0751a14857a5
 	github.com/brianolson/cbor_go v1.0.0
 	github.com/dhowden/tag v0.0.0-20191122115059-7e5c04feccd8

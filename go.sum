@@ -30,6 +30,8 @@ github.com/blobcache/blobcache v0.0.0-20200910035632-e860f6c3a3ac h1:+yCrUMt841f
 github.com/blobcache/blobcache v0.0.0-20200910035632-e860f6c3a3ac/go.mod h1:tqhGjZgnoYiEAmDQTs21+7bBVXdgTKF//52oPjz2GiM=
 github.com/blobcache/blobcache v0.0.0-20201018013000-87bb905b063f h1:U37dj/YmYqZBSMdQjnaHsN64kdQcSlBv+7acn8RsLSs=
 github.com/blobcache/blobcache v0.0.0-20201018013000-87bb905b063f/go.mod h1:R0xxVabcbzQmgT3u0+u8KDLNjcGmsAmUeJfdLeCyb30=
+github.com/blobcache/blobcache v0.0.0-20201127192231-ba90a01e7601 h1:RdNBRshGxwdO1o4g7+WehPQoslT33nAvY00CCdqZzs4=
+github.com/blobcache/blobcache v0.0.0-20201127192231-ba90a01e7601/go.mod h1:bNvW0qBF7qK11KHJTLHiTX3DpR20g7351QYWuKpLNGo=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
 github.com/brendoncarroll/go-p2p v0.0.0-20200331165228-587073f925e1 h1:Z7OgMb7YiSXs0PKfQm0nO1IcsiABkODNJLb1Cr6vVJE=
 github.com/brendoncarroll/go-p2p v0.0.0-20200331165228-587073f925e1/go.mod h1:DUvnp8Lr8WqhjaO2qV/YNsucn9W3GnbXFMdkDbwel2Y=
@@ -435,6 +437,8 @@ golang.org/x/sys v0.0.0-20200909081042-eff7692f9009 h1:W0lCpv29Hv0UaM1LXb9QlBHLN
 golang.org/x/sys v0.0.0-20200909081042-eff7692f9009/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20201017003518-b09fb700fbb7 h1:XtNJkfEjb4zR3q20BBBcYUykVOEMgZeIUOpBPfNYgxg=
 golang.org/x/sys v0.0.0-20201017003518-b09fb700fbb7/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20201020230747-6e5568b54d1a h1:e3IU37lwO4aq3uoRKINC7JikojFmE5gO7xhfxs8VC34=
+golang.org/x/sys v0.0.0-20201020230747-6e5568b54d1a/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/text v0.0.0-20170915032832-14c0d48ead0c/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
 golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
 golang.org/x/text v0.3.1-0.20180807135948-17ff2d5776d2/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
