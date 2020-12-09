@@ -7,6 +7,9 @@ Hoard aims to let normal non-technical users organize content, share files, and 
 Hoard is *only* for content you want to share with peers.
 **DO NOT** use Hoard for personal data, or data that you are not allowed to distribute.
 
+Hoard depends on [INET256](https://github.com/inet256/inet256) to connect to peers.
+The INET256 daemon must be running for hoard to work.
+
 ## How It Works
 When a file is imported into Hoard, its data is encrypted using convergent keys and stored in blobcache.
 Metadata linking to the data blobs is also created and encrypted.

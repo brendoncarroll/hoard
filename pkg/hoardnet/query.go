@@ -128,6 +128,7 @@ func (qs *QueryService) queryRemote(ctx context.Context, id p2p.PeerID, req *Que
 }
 
 func (qs *QueryService) handleAsk(ctx context.Context, m *p2p.Message, w io.Writer) {
+	src := m.Src.(p2p.PeerID)
 	log := log.WithFields(log.Fields{
 		"peer_addr": m.Src,
 	})
@@ -157,8 +158,7 @@ func (qs *QueryService) handleAsk(ctx context.Context, m *p2p.Message, w io.Writ
 			Deadline: deadline,
 		}
 		ctx, cf := context.WithDeadline(ctx, deadline)
-		id := p2p.LookupPeerID(qs.s, m.Src)
-		qs.queryAll(ctx, *id, req2)
+		qs.queryAll(ctx, src, req2)
 		cf()
 	}
 

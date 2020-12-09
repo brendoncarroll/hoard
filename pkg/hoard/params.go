@@ -11,15 +11,16 @@ import (
 	"path/filepath"
 
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-p2p/s/multiswarm"
-	"github.com/brendoncarroll/go-p2p/s/natswarm"
-	"github.com/brendoncarroll/go-p2p/s/quicswarm"
+	"github.com/brendoncarroll/go-p2p/s/peerswarm"
+	"github.com/inet256/inet256/pkg/inet256p2p"
 	log "github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
+const inet256Default = "127.0.0.1:25600"
+
 type Params struct {
-	Swarm      p2p.SecureAskSwarm
+	Swarm      peerswarm.AskSwarm
 	DB         *bolt.DB
 	PrivateKey p2p.PrivateKey
 
@@ -77,13 +78,13 @@ func DefaultParams(dirpath string, sourcePaths []string, uiPath string) (*Params
 	}
 
 	// setup swarm
-	swarm1, err := setupSwarm(privKey)
+	swarm, err := setupSwarm(privKey, inet256Default)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Params{
-		Swarm:              swarm1.(p2p.SecureAskSwarm),
+		Swarm:              swarm,
 		DB:                 db,
 		BlobcachePersist:   persistDB,
 		BlobcacheEphemeral: ephemDB,
@@ -94,16 +95,8 @@ func DefaultParams(dirpath string, sourcePaths []string, uiPath string) (*Params
 	}, nil
 }
 
-func setupSwarm(privKey p2p.PrivateKey) (p2p.Swarm, error) {
-	s1, err := quicswarm.New("0.0.0.0:", privKey)
-	if err != nil {
-		return nil, err
-	}
-	s2 := natswarm.WrapSecureAsk(s1)
-	s3 := multiswarm.NewSecureAsk(map[string]p2p.SecureAskSwarm{
-		"quic": s2,
-	})
-	return s3, nil
+func setupSwarm(privKey p2p.PrivateKey, inet256Addr string) (peerswarm.AskSwarm, error) {
+	return inet256p2p.NewSwarm(inet256Addr, privKey)
 }
 
 func parsePrivate(pemData []byte) (p2p.PrivateKey, error) {
