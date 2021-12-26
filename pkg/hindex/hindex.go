@@ -16,7 +16,7 @@ import (
 	"github.com/brendoncarroll/hoard/pkg/tagging"
 )
 
-type Fingerprint = hcorpus.Fingerprint
+type OID = hcorpus.Fingerprint
 
 // Root is the root of an index
 // The index is structured like this:
@@ -63,61 +63,108 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 	return o.gotkv.NewEmpty(ctx, s)
 }
 
-func (o *Operator) AddTags(ctx context.Context, s cadata.Store, root Root, fp Fingerprint, tags []taggers.Tag) (*Root, error) {
-	b := o.gotkv.NewBuilder(s)
-	sort.SliceStable(tags, func(i, j int) bool {
-		return tags[i].Key < tags[j].Key
-	})
-	var lastKey []byte
+func (o *Operator) AddTags(ctx context.Context, s cadata.Store, root Root, fp OID, tags []taggers.Tag) (*Root, error) {
+	muts := make([]gotkv.Mutation, 2*len(tags))
 	for i, tag := range tags {
 		if err := checkTag(tag); err != nil {
 			return nil, err
 		}
 		forwardEnt := makeForwardEntry(tag, fp)
-		// before
-		var start []byte
-		if i > 0 {
-			start = gotkv.KeyAfter(lastKey)
+		muts[2*i] = gotkv.Mutation{
+			Span:    gotkv.SingleKeySpan(forwardEnt.Key),
+			Entries: []gotkv.Entry{forwardEnt},
 		}
-		it := o.gotkv.NewIterator(s, root, gotkv.Span{
-			Start: start,
-			End:   forwardEnt.Key,
-		})
-		if err := gotkv.CopyAll(ctx, b, it); err != nil {
-			return nil, err
-		}
-		// insert
-		if err := b.Put(ctx, forwardEnt.Key, forwardEnt.Value); err != nil {
-			return nil, err
-		}
-		lastKey = forwardEnt.Key
-	}
-	for _, tag := range tags {
 		inverseEnt := makeInverseEntry(tag, fp)
-		// before
-		start := gotkv.KeyAfter(lastKey)
-		beforeIt := o.gotkv.NewIterator(s, root, gotkv.Span{
-			Start: start,
-			End:   inverseEnt.Key,
-		})
-		if err := gotkv.CopyAll(ctx, b, beforeIt); err != nil {
-			return nil, err
+		muts[2*i+1] = gotkv.Mutation{
+			Span:    gotkv.SingleKeySpan(inverseEnt.Key),
+			Entries: []gotkv.Entry{inverseEnt},
 		}
-		// insert
-		if err := b.Put(ctx, inverseEnt.Key, inverseEnt.Value); err != nil {
-			return nil, err
-		}
-		lastKey = inverseEnt.Key
 	}
-	// after
-	afterIt := o.gotkv.NewIterator(s, root, gotkv.Span{
-		Start: gotkv.KeyAfter(lastKey),
-		End:   nil,
+	sort.Slice(muts, func(i, j int) bool {
+		return bytes.Compare(muts[i].Span.Start, muts[j].Span.Start) < 0
 	})
-	if err := gotkv.CopyAll(ctx, b, afterIt); err != nil {
+	return o.gotkv.Mutate(ctx, s, root, muts...)
+}
+
+func (o *Operator) GetTags(ctx context.Context, s cadata.Store, root Root, oid OID) (ret []tagging.Tag, _ error) {
+	span := gotkv.PrefixSpan(makeForwardKey(nil, oid, nil))
+	if err := o.gotkv.ForEach(ctx, s, root, span, func(ent gotkv.Entry) error {
+		_, key, value, err := parseForwardEntry(ent)
+		if err != nil {
+			return err
+		}
+		ret = append(ret, tagging.Tag{
+			Key:   string(key),
+			Value: append([]byte{}, value...),
+		})
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	return b.Finish(ctx)
+	return ret, nil
+}
+
+func (o *Operator) GetTagValue(ctx context.Context, s cadata.Store, root Root, fp OID, tagKey string) ([]byte, error) {
+	key := makeForwardKey(nil, fp, []byte(tagKey))
+	return o.gotkv.Get(ctx, s, gotkv.Root(root), key)
+}
+
+func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, fn func(OID, []tagging.Tag) error) error {
+	span := prefixSpan(gotkv.TotalSpan(), []byte{'f', 0x00})
+	var currentFP OID
+	var tags []tagging.Tag
+	return o.gotkv.ForEach(ctx, s, root, span, func(ent gotkv.Entry) error {
+		fp, key, value, err := parseForwardEntry(ent)
+		if err != nil {
+			return err
+		}
+		if fp != currentFP {
+			if currentFP != (OID{}) {
+				if err := fn(currentFP, tags); err != nil {
+					return err
+				}
+			}
+			currentFP = fp
+			tags = tags[:0]
+		}
+		tags = append(tags, tagging.Tag{
+			Key:   string(key),
+			Value: append([]byte{}, value...),
+		})
+		return nil
+	})
+}
+
+func (o *Operator) ForEachTagKey(ctx context.Context, s cadata.Store, root Root, fn func(string) error) error {
+	span := prefixSpan(gotkv.TotalSpan(), []byte{'i', 0x00})
+	var lastKey []byte
+	return o.gotkv.ForEach(ctx, s, root, span, func(ent gotkv.Entry) error {
+		_, key, _, err := parseInverseEntry(ent)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(key, lastKey) {
+			lastKey = append(lastKey[:0], key...)
+			if err := fn(string(key)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (o *Operator) ForEachTagValue(ctx context.Context, s cadata.Store, root Root, tagKey string, fn func([]byte) error) error {
+	prefix := []byte{'i', 0x00}
+	prefix = append(prefix, tagKey...)
+	prefix = append(prefix, 0x00)
+	span := gotkv.PrefixSpan(prefix)
+	return o.gotkv.ForEach(ctx, s, root, span, func(ent gotkv.Entry) error {
+		_, _, value, err := parseInverseEntry(ent)
+		if err != nil {
+			return err
+		}
+		return fn(value)
+	})
 }
 
 func (o *Operator) Search(ctx context.Context, s cadata.Store, root Root, query tagging.Query) (*tagging.ResultSet, error) {
@@ -129,55 +176,53 @@ func checkTag(t tagging.Tag) error {
 	if strings.Contains(t.Key, "\x00") {
 		return errors.Errorf("tag key cannot contain NULL byte")
 	}
-	if strings.Contains(t.Value, "\x00") {
+	if bytes.Contains(t.Value, []byte("\x00")) {
 		return errors.Errorf("tag value cannot contain NULL byte")
 	}
 	return nil
 }
 
-func makeForwardKey(out []byte, tagKey []byte, fp Fingerprint) []byte {
+func makeForwardKey(out []byte, fp OID, tagKey []byte) []byte {
 	out = append(out, 'f')
 	out = append(out, 0x00)
-	out = append(out, tagKey...)
-	out = append(out, 0x00)
 	out = append(out, fp[:]...)
+	out = append(out, tagKey...)
 	return out
 }
 
-func makeForwardEntry(tag tagging.Tag, fp Fingerprint) gotkv.Entry {
+func makeForwardEntry(tag tagging.Tag, fp OID) gotkv.Entry {
 	return gotkv.Entry{
-		Key:   makeForwardKey(nil, []byte(tag.Key), fp),
+		Key:   makeForwardKey(nil, fp, []byte(tag.Key)),
 		Value: []byte(tag.Value),
 	}
 }
 
-func parseForwardKey(x []byte) ([]byte, Fingerprint, error) {
-	parts := bytes.SplitN(x, []byte{0x00}, 3)
-	if len(parts) != 3 {
-		return nil, Fingerprint{}, errors.Errorf("invalid forward key: %q", x)
+func parseForwardKey(x []byte) ([]byte, OID, error) {
+	parts := bytes.SplitN(x, []byte{0x00}, 2)
+	if len(parts) != 2 {
+		return nil, OID{}, errors.Errorf("invalid forward key: %q", x)
 	}
 	dirBytes := parts[0]
-	tagKeyBytes := parts[1]
-	fpBytes := parts[2]
 	if len(dirBytes) != 1 || dirBytes[0] != 'f' {
-		return nil, Fingerprint{}, errors.Errorf("incorrect key direction identifier: %q", dirBytes)
+		return nil, OID{}, errors.Errorf("incorrect key direction identifier: %q", dirBytes)
 	}
-	fp := Fingerprint{}
-	if n := copy(fp[:], fpBytes); n < len(fp) {
-		return nil, Fingerprint{}, errors.Errorf("too short to be fingerprint")
+	if len(parts[1]) < len(OID{}) {
+		return nil, OID{}, errors.Errorf("too short to be fingerprint")
 	}
+	fp := hcorpus.FPFromBytes(parts[1])
+	tagKeyBytes := parts[1][32:]
 	return tagKeyBytes, fp, nil
 }
 
-func parseForwardEntry(ent gotkv.Entry) (Fingerprint, []byte, []byte, error) {
+func parseForwardEntry(ent gotkv.Entry) (OID, []byte, []byte, error) {
 	key, fp, err := parseForwardKey(ent.Key)
 	if err != nil {
-		return Fingerprint{}, nil, nil, err
+		return OID{}, nil, nil, err
 	}
 	return fp, key, ent.Value, nil
 }
 
-func makeInverseKey(out []byte, tag tagging.Tag, fp Fingerprint) []byte {
+func makeInverseKey(out []byte, tag tagging.Tag, fp OID) []byte {
 	out = append(out, 'i')
 	out = append(out, 0x00)
 	out = append(out, []byte(tag.Key)...)
@@ -188,14 +233,14 @@ func makeInverseKey(out []byte, tag tagging.Tag, fp Fingerprint) []byte {
 	return out
 }
 
-func makeInverseEntry(tag tagging.Tag, fp Fingerprint) gotkv.Entry {
+func makeInverseEntry(tag tagging.Tag, fp OID) gotkv.Entry {
 	return gotkv.Entry{
 		Key:   makeInverseKey(nil, tag, fp),
 		Value: fp[:],
 	}
 }
 
-func parseInverseKey(x []byte) (key, value []byte, _ *Fingerprint, _ error) {
+func parseInverseKey(x []byte) (key, value []byte, _ *OID, _ error) {
 	parts := bytes.SplitN(x, []byte{0x00}, 4)
 	if len(parts) != 4 {
 		return nil, nil, nil, errors.Errorf("invalid inverse key: %q", x)
@@ -207,9 +252,14 @@ func parseInverseKey(x []byte) (key, value []byte, _ *Fingerprint, _ error) {
 	if len(dirBytes) != 1 || dirBytes[0] != 'i' {
 		return nil, nil, nil, errors.Errorf("incorrect key direction identifier: %q", dirBytes)
 	}
-	fp := Fingerprint{}
-	if n := copy(fp[:], fpBytes); n < len(fp) {
-		return nil, nil, nil, errors.Errorf("too short to be fingerprint")
-	}
+	fp := hcorpus.FPFromBytes(fpBytes)
 	return tagKey, tagValue, &fp, nil
+}
+
+func parseInverseEntry(ent gotkv.Entry) (_ *OID, key, value []byte, _ error) {
+	key, value, fp, err := parseInverseKey(ent.Key)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return fp, key, value, nil
 }

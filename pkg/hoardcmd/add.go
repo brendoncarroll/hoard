@@ -17,7 +17,7 @@ var addCmd = &cobra.Command{
 		fs := posixfs.NewOSFS()
 		w := cmd.OutOrStdout()
 		logrus.Infof("importing %s ...\n", target)
-		err := posixfs.WalkLeaves(ctx, fs, target, func(p string, de posixfs.DirEnt) error {
+		return posixfs.WalkLeaves(ctx, fs, target, func(p string, de posixfs.DirEnt) error {
 			f, err := fs.OpenFile(p, posixfs.O_RDONLY, 0)
 			if err != nil {
 				return err
@@ -30,9 +30,5 @@ var addCmd = &cobra.Command{
 			fmt.Fprintf(w, "%v %s\n", fp, p)
 			return nil
 		})
-		if err != nil {
-			return err
-		}
-		return nil
 	},
 }

@@ -17,24 +17,27 @@ type QueryBackend struct {
 }
 
 func (qb QueryBackend) Scan(ctx context.Context, span tagging.Span, fn tagging.IterFunc) error {
-	span2 := transformSpan(span, []byte{'f'})
+	span2 := prefixSpan(gotkv.Span{Start: span.Begin, End: span.End}, []byte{'f', 0x00})
 	return qb.op.gotkv.ForEach(ctx, qb.s, qb.root, span2, func(ent gotkv.Entry) error {
-		key, fp, err := parseForwardKey(ent.Key)
+		fp, key, value, err := parseForwardEntry(ent)
 		if err != nil {
 			return err
 		}
-		return fn(fp, key, ent.Value)
+		return fn(fp, key, value)
 	})
 }
 
-func (qb QueryBackend) GetValue(ctx context.Context, id Fingerprint, key []byte) ([]byte, error) {
-	return qb.op.gotkv.Get(ctx, qb.s, qb.root, makeForwardKey(nil, key, id))
+func (qb QueryBackend) GetValue(ctx context.Context, id OID, key string) ([]byte, error) {
+	return qb.op.gotkv.Get(ctx, qb.s, qb.root, makeForwardKey(nil, id, []byte(key)))
 }
 
-func (qb QueryBackend) ScanInverted(ctx context.Context, span tagging.Span, fn tagging.IterFunc) error {
-	span2 := transformSpan(span, []byte{'i'})
-	return qb.op.gotkv.ForEach(ctx, qb.s, qb.root, span2, func(ent gotkv.Entry) error {
-		key, value, fp, err := parseInverseKey(ent.Key)
+func (qb QueryBackend) ScanInverted(ctx context.Context, tagKey string, fn tagging.IterFunc) error {
+	var span gotkv.Span
+	if tagKey != "" {
+		span = prefixSpan(gotkv.PrefixSpan([]byte(tagKey)), []byte{'i', 0x00})
+	}
+	return qb.op.gotkv.ForEach(ctx, qb.s, qb.root, span, func(ent gotkv.Entry) error {
+		fp, key, value, err := parseInverseEntry(ent)
 		if err != nil {
 			return err
 		}
@@ -42,16 +45,14 @@ func (qb QueryBackend) ScanInverted(ctx context.Context, span tagging.Span, fn t
 	})
 }
 
-func transformSpan(x tagging.Span, prefix []byte) gotkv.Span {
-	start := append(prefix, 0x00)
-	start = append(start, x.Begin...)
-
-	end := gotkv.PrefixEnd(append(prefix, 0x00))
+func prefixSpan(x gotkv.Span, prefix []byte) gotkv.Span {
+	start := prefix
+	start = append(start, x.Start...)
+	end := gotkv.PrefixEnd(prefix)
 	if x.End != nil {
-		end = append(prefix, 0x00)
+		end = prefix
 		end = append(end, x.End...)
 	}
-
 	return gotkv.Span{
 		Start: start,
 		End:   end,

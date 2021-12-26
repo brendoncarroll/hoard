@@ -8,7 +8,6 @@ import (
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/hoard/pkg/hcorpus"
-	"github.com/gotvc/got/pkg/gotkv"
 )
 
 type ID = hcorpus.Fingerprint
@@ -61,9 +60,9 @@ type IterFunc = func(id ID, key, value []byte) error
 type Span = state.ByteRange
 
 type QueryBackend interface {
-	Scan(ctx context.Context, keySpan Span, fn IterFunc) error
-	ScanInverted(ctx context.Context, keySpan Span, fn IterFunc) error
-	GetValue(ctx context.Context, id ID, key []byte) ([]byte, error)
+	Scan(ctx context.Context, span Span, fn IterFunc) error
+	ScanInverted(ctx context.Context, tagKey string, fn IterFunc) error
+	GetValue(ctx context.Context, id ID, tagKey string) ([]byte, error)
 }
 
 func DoQuery(ctx context.Context, be QueryBackend, q Query) (*ResultSet, error) {
@@ -179,7 +178,7 @@ func scanResults(ctx context.Context, be QueryBackend, ids map[ID]int, pred Pred
 		return err
 	}
 	for id := range ids {
-		value, err := be.GetValue(ctx, id, []byte(pred.Key))
+		value, err := be.GetValue(ctx, id, pred.Key)
 		if err != nil {
 			return err
 		}
@@ -199,8 +198,7 @@ func scanTable(ctx context.Context, be QueryBackend, pred Predicate, fn func(id 
 		if err != nil {
 			return err
 		}
-		span := Span{Begin: []byte(pred.Key), End: gotkv.KeyAfter([]byte(pred.Key))}
-		err = be.ScanInverted(ctx, span, func(id ID, _, value []byte) error {
+		err = be.ScanInverted(ctx, pred.Key, func(id ID, _, value []byte) error {
 			if predFunc(value) {
 				if !fn(id) {
 					return ErrStopIter

@@ -17,9 +17,9 @@ func ParseFLAC(r io.ReadSeeker, tags []Tag) ([]Tag, error) {
 
 	// Stream info
 	tags = append(tags, []Tag{
-		{"bits_per_sample", fmt.Sprint(stream.Info.BitsPerSample)},
-		{"channels", fmt.Sprint(stream.Info.NChannels)},
-		{"sample_rate", fmt.Sprint(stream.Info.SampleRate)},
+		{"bits_per_sample", []byte(fmt.Sprint(stream.Info.BitsPerSample))},
+		{"channels", []byte(fmt.Sprint(stream.Info.NChannels))},
+		{"sample_rate", []byte(fmt.Sprint(stream.Info.SampleRate))},
 	}...)
 
 	// Tags
@@ -37,11 +37,9 @@ func ParseFLAC(r io.ReadSeeker, tags []Tag) ([]Tag, error) {
 func fromVorbis(comment *meta.VorbisComment, tags []Tag) []Tag {
 	for _, vtag := range comment.Tags {
 		key := vtag[0]
-		value := vtag[1]
-
+		value := []byte(vtag[1])
 		key = strings.ToLower(key)
-
-		tags = append(tags, Tag{key, value})
+		tags = append(tags, Tag{Key: key, Value: value})
 	}
 	return tags
 }

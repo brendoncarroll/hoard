@@ -2,9 +2,12 @@ package hoardcmd
 
 import (
 	"context"
+	"path/filepath"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/cells"
+	"github.com/brendoncarroll/go-state/cadata/fsstore"
+	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/brendoncarroll/hoard/pkg/filecell"
 	"github.com/brendoncarroll/hoard/pkg/hoard"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/spf13/cobra"
@@ -23,6 +26,10 @@ func init() {
 	rootCmd.AddCommand(catCmd)
 	rootCmd.AddCommand(addCmd)
 	rootCmd.AddCommand(lsTagsCmd)
+	rootCmd.AddCommand(searchCmd)
+	rootCmd.AddCommand(lsFPCmd)
+	rootCmd.AddCommand(lsObjsCmd)
+	rootCmd.AddCommand(lsTagValuesCmd)
 }
 
 var rootCmd = &cobra.Command{
@@ -40,20 +47,21 @@ var rootCmd = &cobra.Command{
 }
 
 func setup() (err error) {
-	newCell := func() cells.Cell {
-		return cells.NewMem(1 << 16)
+	dir, err := filepath.Abs(".")
+	if err != nil {
+		return err
 	}
-	newStore := func() cadata.Store {
-		return cadata.NewMem(cadata.DefaultHash, gotfs.DefaultMaxBlobSize)
+	workingDir := posixfs.NewDirFS(dir)
+	if err := posixfs.MkdirAll(workingDir, "hoard_data/blobs", 0o755); err != nil {
+		return err
 	}
+	cell := filecell.New(workingDir, "hoard_data/CELL")
+	storeFS := posixfs.NewPrefixed(workingDir, "hoard_data/blobs")
+	store := fsstore.New(storeFS, cadata.DefaultHash, gotfs.DefaultMaxBlobSize)
 	h = hoard.New(hoard.Params{
-		Corpus: hoard.Volume{
-			Cell:  newCell(),
-			Store: newStore(),
-		},
-		Index: hoard.Volume{
-			Cell:  newCell(),
-			Store: newStore(),
+		Volume: hoard.Volume{
+			Cell:  cell,
+			Store: store,
 		},
 	})
 	return nil
@@ -61,4 +69,11 @@ func setup() (err error) {
 
 func teardown() error {
 	return nil
+}
+
+type Config struct {
+	Corpus hoard.VolumeSpec `json:"corpus"`
+	Index  hoard.VolumeSpec `json:"index"`
+
+	Indexes hoard.VolumeSpec `json:"indexes"`
 }

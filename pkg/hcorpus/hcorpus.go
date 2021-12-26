@@ -23,6 +23,11 @@ func (fp Fingerprint) HexString() string {
 	return hex.EncodeToString(fp[:])
 }
 
+func FPFromBytes(x []byte) (ret Fingerprint) {
+	copy(ret[:], x)
+	return ret
+}
+
 type Fingerprinter struct {
 	h hash.Hash
 }
