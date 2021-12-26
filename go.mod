@@ -5,13 +5,12 @@ go 1.17
 require (
 	github.com/brendoncarroll/go-state v0.0.0-20211224171650-20dda2daa9ae
 	github.com/dhowden/tag v0.0.0-20191122115059-7e5c04feccd8
-	github.com/gotvc/got v0.0.2-0.20211224190103-574018e16f2e
+	github.com/gotvc/got v0.0.2-0.20211226224920-b04ff35662b5
 	github.com/mewkiz/flac v1.0.6
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.7.0
-	go.etcd.io/bbolt v1.3.5
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
 )
 
@@ -35,5 +34,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 	lukechampine.com/blake3 v1.1.5 // indirect
 )
-
-replace github.com/gotvc/got => ../../gotvc/got
