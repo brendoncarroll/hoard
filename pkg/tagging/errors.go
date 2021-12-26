@@ -1,4 +1,4 @@
-package tagdb
+package tagging
 
 import "github.com/pkg/errors"
 

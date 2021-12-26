@@ -2,18 +2,17 @@ package hoardcmd
 
 import (
 	"context"
-	"path/filepath"
 
+	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/cells"
 	"github.com/brendoncarroll/hoard/pkg/hoard"
+	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/spf13/cobra"
 )
 
 var (
-	h          *hoard.Node
-	ctx        = context.Background()
-	dataDir    string
-	contentDir string
-	uiDir      string
+	ctx = context.Background()
+	h   *hoard.Hoard
 )
 
 func Execute() error {
@@ -21,9 +20,9 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "./", "--data-dir=/path/to/data")
-	rootCmd.PersistentFlags().StringVar(&contentDir, "content-dir", "", "--content-dir=/path/to/content")
-	rootCmd.PersistentFlags().StringVar(&uiDir, "ui-dir", "", "--ui-dir=/path/to/ui")
+	rootCmd.AddCommand(catCmd)
+	rootCmd.AddCommand(addCmd)
+	rootCmd.AddCommand(lsTagsCmd)
 }
 
 var rootCmd = &cobra.Command{
@@ -35,27 +34,31 @@ var rootCmd = &cobra.Command{
 		}
 		return setup()
 	},
+	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+		return teardown()
+	},
 }
 
 func setup() (err error) {
-	if dataDir == "" {
-		dataDir = "./"
+	newCell := func() cells.Cell {
+		return cells.NewMem(1 << 16)
 	}
-	sourcePaths := []string{}
-	if contentDir != "" {
-		sourcePaths = append(sourcePaths, contentDir)
+	newStore := func() cadata.Store {
+		return cadata.NewMem(cadata.DefaultHash, gotfs.DefaultMaxBlobSize)
 	}
-	if uiDir != "" {
-		uiDir, err = filepath.Abs(uiDir)
-		if err != nil {
-			return err
-		}
-	}
+	h = hoard.New(hoard.Params{
+		Corpus: hoard.Volume{
+			Cell:  newCell(),
+			Store: newStore(),
+		},
+		Index: hoard.Volume{
+			Cell:  newCell(),
+			Store: newStore(),
+		},
+	})
+	return nil
+}
 
-	params, err := hoard.DefaultParams(dataDir, sourcePaths, uiDir)
-	if err != nil {
-		return err
-	}
-	h, err = hoard.New(params)
-	return err
+func teardown() error {
+	return nil
 }

@@ -2,411 +2,203 @@ package hoard
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"sync"
-	"time"
 
-	"github.com/blobcache/blobcache/pkg/bcstate"
-	"github.com/blobcache/blobcache/pkg/blobcache"
-	"github.com/blobcache/blobcache/pkg/blobs"
-	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-p2p/p/simplemux"
-	"github.com/brendoncarroll/go-p2p/s/wlswarm"
-	log "github.com/sirupsen/logrus"
-	bolt "go.etcd.io/bbolt"
-
-	"github.com/brendoncarroll/hoard/pkg/boltkv"
-	"github.com/brendoncarroll/hoard/pkg/fsbridge"
-	"github.com/brendoncarroll/hoard/pkg/hoardfile"
-	"github.com/brendoncarroll/hoard/pkg/hoardnet"
-	"github.com/brendoncarroll/hoard/pkg/hoardproto"
-	"github.com/brendoncarroll/hoard/pkg/tagdb"
+	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/cells"
+	"github.com/brendoncarroll/hoard/pkg/hcorpus"
+	"github.com/brendoncarroll/hoard/pkg/hindex"
 	"github.com/brendoncarroll/hoard/pkg/taggers"
+	"github.com/brendoncarroll/hoard/pkg/tagging"
 )
 
-const bucketManifests = "manifests"
-
-type Node struct {
-	params    Params
-	localID   p2p.PeerID
-	swarm     p2p.SecureAskSwarm
-	peerStore *PeerStore
-	discover  p2p.DiscoveryService
-
-	fsbridges []fsbridge.Bridge
-
-	hnet *hoardnet.HoardNet
-
-	bcn *blobcache.Node
-
-	db    *bolt.DB
-	tagdb *tagdb.TagDB
-
-	suggestedCache sync.Map
+type Volume struct {
+	Cell  cells.Cell
+	Store cadata.Store
 }
 
-func New(params *Params) (*Node, error) {
-	extSources := []blobcache.Source{}
-	bridges := []*fsbridge.Bridge{}
-	for _, p := range params.SourcePaths {
-		bucketName := "fsbridge"
-		kv := boltkv.New(params.DB, bucketName)
-		fsbp := fsbridge.Params{
-			KV:         kv,
-			Path:       p,
-			ScanPeriod: 60 * time.Minute,
+type Params struct {
+	Corpus Volume
+	Index  Volume
+}
+
+type OID = hcorpus.Fingerprint
+
+type Hoard struct {
+	corpus  Volume
+	index   Volume
+	indexes []Volume
+
+	hindex  *hindex.Operator
+	hcorpus *hcorpus.Operator
+}
+
+func New(params Params) *Hoard {
+	return &Hoard{
+		corpus:  params.Corpus,
+		index:   params.Index,
+		hindex:  hindex.New(),
+		hcorpus: hcorpus.New(),
+	}
+}
+
+func (h *Hoard) Add(ctx context.Context, r io.Reader) (*OID, error) {
+	vol := h.corpus
+	var ret *OID
+	var root2 *hcorpus.Root
+	if err := applyCorpus(ctx, vol.Cell, func(root *hcorpus.Root) (*hcorpus.Root, error) {
+		if root == nil {
+			var err error
+			if root, err = h.hcorpus.NewEmpty(ctx, vol.Store); err != nil {
+				return nil, err
+			}
 		}
-		b := fsbridge.New(fsbp)
-		log.WithFields(log.Fields{
-			"path": p,
-		}).Info("created fs bridge")
-
-		extSources = append(extSources, b)
-		bridges = append(bridges)
-	}
-
-	// p2p
-	peerStore := newPeerStore(params.DB, params.Swarm)
-	swarm := wlswarm.WrapSecureAsk(params.Swarm, peerStore.Contains)
-	mux := simplemux.MultiplexSwarm(swarm)
-
-	bcn := blobcache.NewNode(blobcache.Params{
-		Mux:             mux,
-		PrivateKey:      params.PrivateKey,
-		PeerStore:       peerStore,
-		Persistent:      bcstate.NewBoltDB(params.BlobcachePersist, params.Capacity*19/20),
-		Ephemeral:       bcstate.NewBoltDB(params.BlobcacheEphemeral, params.Capacity*1/20),
-		ExternalSources: extSources,
-	})
-
-	n := &Node{
-		params: *params,
-		// p2p
-		localID:   p2p.NewPeerID(params.Swarm.PublicKey()),
-		swarm:     swarm,
-		peerStore: peerStore,
-
-		// blobcache
-		bcn: bcn,
-
-		// db
-		db: params.DB,
-
-		tagdb: tagdb.NewDB(params.DB),
-	}
-	var err error
-	n.hnet, err = hoardnet.New(mux, n, peerStore)
-	if err != nil {
-		return nil, err
-	}
-
-	return n, nil
-}
-
-// AddFile imports and creates a manifest for the file at p
-func (n *Node) AddFile(ctx context.Context, p string) (*Manifest, error) {
-	log.Println("adding file", p)
-	f, err := os.Open(p)
-	if err != nil {
-		return nil, err
-	}
-
-	pinSetID, err := n.bcn.CreatePinSet(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-	s := newStore(n.bcn, pinSetID)
-	hf, err := hoardfile.Create(ctx, s, f)
-	if err != nil {
-		return nil, err
-	}
-
-	mf, err := n.createManifest(ctx, *hf, pinSetID)
-	if err != nil {
-		return nil, err
-	}
-
-	for k, v := range map[string]string{
-		"filename":  filepath.Base(p),
-		"extension": filepath.Ext(p),
-	} {
-		if err := n.tagdb.PutTag(ctx, mf.ID, k, v); err != nil {
+		fp, root, err := h.hcorpus.Add(ctx, vol.Store, *root, r)
+		if err != nil {
 			return nil, err
 		}
+		ret = &fp
+		root2 = root
+		return root, nil
+	}); err != nil {
+		return nil, nil
 	}
-
-	return n.GetManifest(ctx, mf.ID)
+	rs, err := h.hcorpus.Get(ctx, vol.Store, *root2, *ret)
+	if err != nil {
+		return nil, err
+	}
+	tagSet := tagging.TagSet{}
+	if err := taggers.SuggestTags(rs, tagSet); err != nil {
+		return nil, err
+	}
+	vol = h.index
+	if err := applyIndex(ctx, vol.Cell, func(root *hindex.Root) (*hindex.Root, error) {
+		if root == nil {
+			var err error
+			if root, err = h.hindex.NewEmpty(ctx, vol.Store); err != nil {
+				return nil, err
+			}
+		}
+		return h.hindex.AddTags(ctx, vol.Store, *root, *ret, tagSet.Slice())
+	}); err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
-// AddAllFiles calls AddFile for each file with a path below p
-func (n *Node) AddAllFiles(ctx context.Context, p string) error {
-	finfo, err := os.Stat(p)
+func (h *Hoard) Get(ctx context.Context, id OID) (io.ReadSeeker, error) {
+	vol := h.corpus
+	root, err := getCorpus(ctx, vol.Cell)
+	if err != nil {
+		return nil, err
+	}
+	return h.hcorpus.Get(ctx, vol.Store, *root, id)
+}
+
+func (h *Hoard) ListByPrefix(ctx context.Context, prefix []byte, limit int) (ret []OID, _ error) {
+	vol := h.corpus
+	root, err := getCorpus(ctx, vol.Cell)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.hcorpus.ForEach(ctx, vol.Store, *root, prefix, func(fp OID) error {
+		ret = append(ret, fp)
+		if len(ret) >= limit {
+			return tagging.ErrStopIter
+		}
+		return nil
+	}); err != nil && err != tagging.ErrStopIter {
+		return nil, err
+	}
+	return ret, nil
+}
+
+func (h *Hoard) ListTags(ctx context.Context, fn func(id OID, tag tagging.Tag) error) error {
+	vol := h.index
+	root, err := getIndex(ctx, vol.Cell)
 	if err != nil {
 		return err
 	}
-	if finfo.IsDir() {
-		f, err := os.Open(p)
-		if err != nil {
-			return err
-		}
-		finfos, err := f.Readdir(0)
-		if err != nil {
-			return err
-		}
-		for _, finfo := range finfos {
-			if err := n.AddAllFiles(ctx, filepath.Join(p, finfo.Name())); err != nil {
-				return err
+	qb := h.hindex.NewQueryBackend(vol.Store, *root)
+	return qb.Scan(ctx, tagging.Span{}, func(id OID, key, value []byte) error {
+		return fn(id, tagging.Tag{Key: string(key), Value: string(value)})
+	})
+}
+
+func (h *Hoard) Search(ctx context.Context, query tagging.Query) ([]OID, error) {
+	vol := h.index
+	root, err := getIndex(ctx, vol.Cell)
+	if err != nil {
+		return nil, err
+	}
+	res, err := h.hindex.Search(ctx, vol.Store, *root, query)
+	if err != nil {
+		return nil, err
+	}
+	return res.IDs, nil
+}
+
+func getIndex(ctx context.Context, c cells.Cell) (*hindex.Root, error) {
+	var x hindex.Root
+	if err := getJSON(ctx, c, &x); err != nil {
+		return nil, err
+	}
+	return &x, nil
+}
+
+func getCorpus(ctx context.Context, c cells.Cell) (*hcorpus.Root, error) {
+	var x hcorpus.Root
+	if err := getJSON(ctx, c, &x); err != nil {
+		return nil, err
+	}
+	return &x, nil
+}
+
+func getJSON(ctx context.Context, cell cells.Cell, x interface{}) error {
+	data, err := cells.GetBytes(ctx, cell)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, &x)
+}
+
+func applyCorpus(ctx context.Context, cell cells.Cell, fn func(root *hcorpus.Root) (*hcorpus.Root, error)) error {
+	return cells.Apply(ctx, cell, func(data []byte) ([]byte, error) {
+		var x *hcorpus.Root
+		if len(data) > 0 {
+			x = &hcorpus.Root{}
+			if err := json.Unmarshal(data, x); err != nil {
+				return nil, err
 			}
 		}
-	} else {
-		_, err := n.AddFile(ctx, p)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// AddDir adds a directory as a single manifest
-func (n *Node) AddDir(ctx context.Context, p string) error {
-	panic("not implemented")
-}
-
-// PutTag associates a tag with the manifest associated with id
-func (n *Node) PutTag(ctx context.Context, id uint64, key, value string) (*Manifest, error) {
-	if err := n.tagdb.PutTag(ctx, id, key, value); err != nil {
-		return nil, err
-	}
-	return n.GetManifest(ctx, id)
-}
-
-// DeleteTag removes a tag from the manifest associated with id
-func (n *Node) DeleteTag(ctx context.Context, id uint64, key string) (*Manifest, error) {
-	if err := n.tagdb.DeleteTag(ctx, id, key); err != nil {
-		return nil, err
-	}
-	return n.GetManifest(ctx, id)
-}
-
-func (n *Node) GetData(ctx context.Context, id uint64, p string) (io.ReadSeeker, error) {
-	mf, err := n.GetManifest(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	s := newStore(n.bcn, 0)
-	return hoardfile.NewReader(ctx, s, mf.File), nil
-}
-
-func (n *Node) QueryManifests(ctx context.Context, q tagdb.Query) (*ResultSet, error) {
-	tagRes, err := n.tagdb.Query(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-
-	mfs := make([]*Manifest, len(tagRes.IDs))
-	for i := range tagRes.IDs {
-		mf, err := n.GetManifest(ctx, tagRes.IDs[i])
+		y, err := fn(x)
 		if err != nil {
 			return nil, err
 		}
-		mfs[i] = mf
-	}
-
-	resultSet := &ResultSet{
-		Manifests: mfs,
-
-		Offest: tagRes.Offset,
-		Count:  tagRes.Count,
-		Total:  tagRes.Total,
-	}
-	return resultSet, err
+		if y == nil {
+			return nil, nil
+		}
+		return json.Marshal(y)
+	})
 }
 
-func (n *Node) QueryProtocol(ctx context.Context, q tagdb.Query) ([]*hoardproto.Manifest, error) {
-	tagRes, err := n.tagdb.Query(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-
-	mfs := make([]*hoardproto.Manifest, len(tagRes.IDs))
-	for i := range tagRes.IDs {
-		mf, err := n.GetManifest(ctx, tagRes.IDs[i])
+func applyIndex(ctx context.Context, cell cells.Cell, fn func(root *hindex.Root) (*hindex.Root, error)) error {
+	return cells.Apply(ctx, cell, func(data []byte) ([]byte, error) {
+		var x *hindex.Root
+		if len(data) > 0 {
+			x = &hindex.Root{}
+			if err := json.Unmarshal(data, x); err != nil {
+				return nil, err
+			}
+		}
+		y, err := fn(x)
 		if err != nil {
 			return nil, err
 		}
-		pmf := mf.Manifest
-		mfs[i] = &pmf
-	}
-	return mfs, nil
-}
-
-func (n *Node) createManifest(ctx context.Context, file hoardfile.File, pinSetID blobcache.PinSetID) (*Manifest, error) {
-	mf := &Manifest{
-		Manifest: hoardproto.Manifest{
-			File: file,
-		},
-		PinSetID: pinSetID,
-	}
-
-	err := n.db.Update(func(tx *bolt.Tx) error {
-		mb, err := tx.CreateBucketIfNotExists([]byte(bucketManifests))
-		if err != nil {
-			return err
+		if y == nil {
+			return nil, nil
 		}
-		i, err := mb.NextSequence()
-		if err != nil {
-			return err
-		}
-		mf.ID = i
-
-		value, err := json.Marshal(mf)
-		if err != nil {
-			return err
-		}
-
-		key := make([]byte, 8)
-		binary.BigEndian.PutUint64(key, i)
-		if err := mb.Put(key, value); err != nil {
-			return err
-		}
-
-		mf.ID = i
-		return nil
+		return json.Marshal(y)
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	log.Println("created manifest", "id:", mf.ID)
-	return mf, nil
-}
-
-func (n *Node) GetManifest(ctx context.Context, id uint64) (*Manifest, error) {
-	if id == 0 {
-		return nil, os.ErrNotExist
-	}
-	mf := &Manifest{}
-	err := n.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bucketManifests))
-		key := make([]byte, 8)
-		binary.BigEndian.PutUint64(key, id)
-		value := b.Get(key)
-		return json.Unmarshal(value, &mf)
-	})
-	if err != nil {
-		return nil, err
-	}
-	mf.ID = id
-
-	// tags
-	tags, err := n.tagdb.AllTagsFor(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	mf.Tags = tags
-
-	// pinset
-	pinSet, err := n.bcn.GetPinSet(ctx, mf.PinSetID)
-	if err != nil {
-		return nil, err
-	}
-	mf.BlobCount = pinSet.Count
-	if pinSet.Root != blobs.ZeroID() {
-		mf.PinSetRoot = &pinSet.Root
-	}
-	mf.Peer = n.localID
-
-	return mf, nil
-}
-
-func (n *Node) ListManifests(ctx context.Context, offset, limit int) (*ResultSet, error) {
-	// TODO: offset is not supported, because there is no sorting.
-	return n.QueryManifests(ctx, tagdb.Query{
-		Limit: limit,
-	})
-}
-
-func (n *Node) GetTag(ctx context.Context, mID uint64, name string) (string, error) {
-	return n.tagdb.GetTag(ctx, mID, name)
-}
-
-// List Peers returns a list of the ids for every peer in the peer store
-func (n *Node) ListPeers(ctx context.Context) ([]p2p.PeerID, error) {
-	return n.peerStore.ListPeers(), nil
-}
-
-// Get Peer returns the peer info for the peer with the given id
-func (n *Node) GetPeer(ctx context.Context, id p2p.PeerID) (*PeerInfo, error) {
-	return n.peerStore.GetPeerInfo(id)
-}
-
-// PutPeer replaces the pinfo for the peer with ID == pinfo.ID
-func (n *Node) PutPeer(ctx context.Context, pinfo *PeerInfo) error {
-	return n.peerStore.PutPeerInfo(pinfo)
-}
-
-// DeletePeer deletes the peer's info from the node
-func (n *Node) DeletePeer(ctx context.Context, id p2p.PeerID) error {
-	return n.peerStore.DeletePeer(id)
-}
-
-func (n *Node) SuggestTags(ctx context.Context, id uint64) (taggers.TagSet, error) {
-	mf, err := n.GetManifest(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	cacheKey := mf.File.Root
-	v, exists := n.suggestedCache.Load(cacheKey)
-	if exists {
-		return v.(taggers.TagSet), nil
-	}
-	s := newStore(n.bcn, mf.PinSetID)
-	r := hoardfile.NewReader(ctx, s, mf.File)
-	tags := make(taggers.TagSet)
-	if err := taggers.SuggestTags(r, tags); err != nil {
-		return nil, err
-	}
-	n.suggestedCache.Store(cacheKey, tags)
-	return tags, nil
-}
-
-func (n *Node) Close() error {
-	errs := []error{
-		n.db.Close(),
-		n.hnet.Close(),
-	}
-	found := false
-	for _, err := range errs {
-		if err != nil {
-			found = true
-		}
-	}
-	if found {
-		return fmt.Errorf("errors closing: %v", errs)
-	}
-	return nil
-}
-
-func (n *Node) getUIPath() string {
-	return n.params.UIPath
-}
-
-func (n *Node) genPinSetName() string {
-	x := time.Now().UnixNano()
-	return fmt.Sprintf("hoard-%d", x)
-}
-
-func bytesToID(buf []byte) uint64 {
-	return binary.BigEndian.Uint64(buf)
-}
-
-func idToBytes(x uint64) []byte {
-	buf := [8]byte{}
-	binary.BigEndian.PutUint64(buf[:], x)
-	return buf[:]
 }
