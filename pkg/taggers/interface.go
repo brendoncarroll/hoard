@@ -1,12 +1,14 @@
 package taggers
 
-import "io"
+import (
+	"io"
 
-type Tag struct {
-	Key, Value string
-}
+	"github.com/brendoncarroll/hoard/pkg/tagging"
+)
 
-type TagSet map[string]string
+type Tag = tagging.Tag
+
+type TagSet = tagging.TagSet
 
 type TagFunc func(r io.ReadSeeker, tags []Tag) ([]Tag, error)
 

@@ -4,16 +4,18 @@ import (
 	"context"
 	"path/filepath"
 
+	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/cadata/fsstore"
+	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/brendoncarroll/hoard/pkg/filecell"
 	"github.com/brendoncarroll/hoard/pkg/hoard"
+	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/spf13/cobra"
 )
 
 var (
-	h          *hoard.Node
-	ctx        = context.Background()
-	dataDir    string
-	contentDir string
-	uiDir      string
+	ctx = context.Background()
+	h   *hoard.Hoard
 )
 
 func Execute() error {
@@ -21,9 +23,13 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "./", "--data-dir=/path/to/data")
-	rootCmd.PersistentFlags().StringVar(&contentDir, "content-dir", "", "--content-dir=/path/to/content")
-	rootCmd.PersistentFlags().StringVar(&uiDir, "ui-dir", "", "--ui-dir=/path/to/ui")
+	rootCmd.AddCommand(catCmd)
+	rootCmd.AddCommand(addCmd)
+	rootCmd.AddCommand(lsTagsCmd)
+	rootCmd.AddCommand(searchCmd)
+	rootCmd.AddCommand(lsFPCmd)
+	rootCmd.AddCommand(lsObjsCmd)
+	rootCmd.AddCommand(lsTagValuesCmd)
 }
 
 var rootCmd = &cobra.Command{
@@ -35,27 +41,39 @@ var rootCmd = &cobra.Command{
 		}
 		return setup()
 	},
+	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+		return teardown()
+	},
 }
 
 func setup() (err error) {
-	if dataDir == "" {
-		dataDir = "./"
-	}
-	sourcePaths := []string{}
-	if contentDir != "" {
-		sourcePaths = append(sourcePaths, contentDir)
-	}
-	if uiDir != "" {
-		uiDir, err = filepath.Abs(uiDir)
-		if err != nil {
-			return err
-		}
-	}
-
-	params, err := hoard.DefaultParams(dataDir, sourcePaths, uiDir)
+	dir, err := filepath.Abs(".")
 	if err != nil {
 		return err
 	}
-	h, err = hoard.New(params)
-	return err
+	workingDir := posixfs.NewDirFS(dir)
+	if err := posixfs.MkdirAll(workingDir, "hoard_data/blobs", 0o755); err != nil {
+		return err
+	}
+	cell := filecell.New(workingDir, "hoard_data/CELL")
+	storeFS := posixfs.NewPrefixed(workingDir, "hoard_data/blobs")
+	store := fsstore.New(storeFS, cadata.DefaultHash, gotfs.DefaultMaxBlobSize)
+	h = hoard.New(hoard.Params{
+		Volume: hoard.Volume{
+			Cell:  cell,
+			Store: store,
+		},
+	})
+	return nil
+}
+
+func teardown() error {
+	return nil
+}
+
+type Config struct {
+	Corpus hoard.VolumeSpec `json:"corpus"`
+	Index  hoard.VolumeSpec `json:"index"`
+
+	Indexes hoard.VolumeSpec `json:"indexes"`
 }

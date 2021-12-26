@@ -1,20 +1,34 @@
 package hoardcmd
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
 
-func init() {
-	rootCmd.AddCommand(addFileCmd)
-}
+	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+)
 
-var addFileCmd = &cobra.Command{
-	Use:   "add-file",
+var addCmd = &cobra.Command{
+	Use:   "add",
 	Short: "Adds a file or every file in a directory individually",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p := args[0]
-		err := h.AddAllFiles(ctx, p)
-		if err != nil {
-			return err
-		}
-		return nil
+		target := args[0]
+		fs := posixfs.NewOSFS()
+		w := cmd.OutOrStdout()
+		logrus.Infof("importing %s ...\n", target)
+		return posixfs.WalkLeaves(ctx, fs, target, func(p string, de posixfs.DirEnt) error {
+			f, err := fs.OpenFile(p, posixfs.O_RDONLY, 0)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			fp, err := h.Add(ctx, f)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(w, "%v %s\n", fp, p)
+			return nil
+		})
 	},
 }
