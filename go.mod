@@ -3,9 +3,9 @@ module github.com/brendoncarroll/hoard
 go 1.17
 
 require (
-	github.com/brendoncarroll/go-state v0.0.0-20211224171650-20dda2daa9ae
+	github.com/brendoncarroll/go-state v0.0.0-20211230195013-ac21638e8788
 	github.com/dhowden/tag v0.0.0-20191122115059-7e5c04feccd8
-	github.com/gotvc/got v0.0.2-0.20211226224920-b04ff35662b5
+	github.com/gotvc/got v0.0.2-0.20211228215454-ee2974ce4cd6
 	github.com/mewkiz/flac v1.0.6
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0

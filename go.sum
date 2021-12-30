@@ -15,8 +15,8 @@ github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBT
 github.com/brendoncarroll/go-p2p v0.0.0-20211024183131-c0c41d099b71/go.mod h1:IYW1gZ9twSWJrkAil9jLMtHnVlAJ0wVc9Y5WpNlv9Oc=
 github.com/brendoncarroll/go-state v0.0.0-20210627233638-99c825eb7040/go.mod h1:EQKdXJyc93dh3yN1wRYdKjAZk+MutF5DFwoW+Vqe5U0=
 github.com/brendoncarroll/go-state v0.0.0-20211120152832-f56522ee55f4/go.mod h1:RLj/N8MmYCrBuPRKizRhmee7fyyKo7ew/MdKv+oPdb8=
-github.com/brendoncarroll/go-state v0.0.0-20211224171650-20dda2daa9ae h1:N7B/FwaCQaUtIWblPC/06WFil9NRLkL0IWa0T7x0RDo=
-github.com/brendoncarroll/go-state v0.0.0-20211224171650-20dda2daa9ae/go.mod h1:RLj/N8MmYCrBuPRKizRhmee7fyyKo7ew/MdKv+oPdb8=
+github.com/brendoncarroll/go-state v0.0.0-20211230195013-ac21638e8788 h1:OP+AMxQWbBtbIYjDTv+oSXT88GcItTP8pU5+wAT/n3E=
+github.com/brendoncarroll/go-state v0.0.0-20211230195013-ac21638e8788/go.mod h1:RLj/N8MmYCrBuPRKizRhmee7fyyKo7ew/MdKv+oPdb8=
 github.com/brendoncarroll/go-tai64 v0.0.0-20211126171311-1ac66f69ad12/go.mod h1:E9+Qr3YRBlU8HsajHzdoyHAm8XRqITZrtsh1gZSzu+4=
 github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7hK1yFx9hf58LP0zeX7UjIGs20ufpu3evjr+s=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
@@ -91,8 +91,8 @@ github.com/google/uuid v1.1.2/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+
 github.com/googleapis/gax-go v2.0.0+incompatible/go.mod h1:SFVmujtThgffbyetf+mdk2eWhX2bMyUtNHzFKcPA9HY=
 github.com/googleapis/gax-go/v2 v2.0.3/go.mod h1:LLvjysVCY1JZeum8Z6l8qUty8fiNwE08qbEPm1M08qg=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
-github.com/gotvc/got v0.0.2-0.20211226224920-b04ff35662b5 h1:YmeYCEv7K5U8icVMO88IPCi7CYCptTHNp6iy/HQi86U=
-github.com/gotvc/got v0.0.2-0.20211226224920-b04ff35662b5/go.mod h1:I1MnA7Ry27V0JkD2wpzPck79UEyduNV0NlJQfpJGu+8=
+github.com/gotvc/got v0.0.2-0.20211228215454-ee2974ce4cd6 h1:XRpbEVxI6RlmEhITo7CfLGcACBLldrjKdJLVpS7kiqE=
+github.com/gotvc/got v0.0.2-0.20211228215454-ee2974ce4cd6/go.mod h1:I1MnA7Ry27V0JkD2wpzPck79UEyduNV0NlJQfpJGu+8=
 github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7/go.mod h1:FecbI9+v66THATjSRHfNgh1IVFe/9kFxbXtjV0ctIMA=
 github.com/grpc-ecosystem/grpc-gateway v1.5.0/go.mod h1:RSKVYQBd5MCa4OVpNdGskqpgL2+G+NZTnrVHpWWfpdw=
 github.com/hashicorp/golang-lru v0.5.1 h1:0hERBMJE1eitiLkihrMvRVBYAkpHzc/J3QdDN+dAcgU=

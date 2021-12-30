@@ -57,7 +57,7 @@ var ErrStopIter = fmt.Errorf("stop iteration")
 
 type IterFunc = func(id ID, key, value []byte) error
 
-type Span = state.ByteRange
+type Span = state.ByteSpan
 
 type QueryBackend interface {
 	Scan(ctx context.Context, span Span, fn IterFunc) error

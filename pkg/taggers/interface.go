@@ -12,7 +12,7 @@ type TagSet = tagging.TagSet
 
 type TagFunc func(r io.ReadSeeker, tags []Tag) ([]Tag, error)
 
-func SuggestTags(r io.ReadSeeker, tags TagSet) error {
+func SuggestTags(rs io.ReadSeeker, tags TagSet) error {
 	tfs := []TagFunc{
 		ParseCommonAudio,
 		ParseFLAC,
@@ -20,11 +20,10 @@ func SuggestTags(r io.ReadSeeker, tags TagSet) error {
 
 	stagingTags := []Tag{}
 	for _, tf := range tfs {
-		var err error
-		if _, err := r.Seek(0, io.SeekStart); err != nil {
+		if _, err := rs.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		stagingTagsNew, err := tf(r, stagingTags)
+		stagingTagsNew, err := tf(rs, stagingTags)
 		if err == nil {
 			stagingTags = stagingTagsNew
 		}
