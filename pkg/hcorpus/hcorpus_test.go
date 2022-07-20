@@ -2,8 +2,6 @@ package hcorpus
 
 import (
 	"context"
-	"io"
-	"strings"
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
@@ -19,12 +17,10 @@ func TestAdd(t *testing.T) {
 	expectedData := "my test string"
 	const N = 5
 	for i := 0; i < N; i++ {
-		fp, root, err := op.Add(ctx, s, *root, strings.NewReader(expectedData))
+		fp, root, err := op.Post(ctx, s, *root, []byte(expectedData))
 		require.NoError(t, err)
 		t.Log(fp)
-		r, err := op.Get(ctx, s, *root, fp)
-		require.NoError(t, err)
-		data, err := io.ReadAll(r)
+		data, err := op.Get(ctx, s, *root, fp)
 		require.NoError(t, err)
 		require.Equal(t, expectedData, string(data))
 	}

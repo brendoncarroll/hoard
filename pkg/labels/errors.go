@@ -1,4 +1,4 @@
-package tagging
+package labels
 
 import "github.com/pkg/errors"
 

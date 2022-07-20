@@ -1,4 +1,4 @@
-package taggers
+package hidx_audio
 
 import (
 	"fmt"
@@ -9,14 +9,14 @@ import (
 	"github.com/mewkiz/flac/meta"
 )
 
-func ParseFLAC(r io.ReadSeeker, tags []Tag) ([]Tag, error) {
+func ParseFLAC(out []Tag, r io.ReadSeeker) ([]Tag, error) {
 	stream, err := flac.Parse(r)
 	if err != nil {
 		return nil, err
 	}
 
 	// Stream info
-	tags = append(tags, []Tag{
+	out = append(out, []Tag{
 		{"bits_per_sample", []byte(fmt.Sprint(stream.Info.BitsPerSample))},
 		{"channels", []byte(fmt.Sprint(stream.Info.NChannels))},
 		{"sample_rate", []byte(fmt.Sprint(stream.Info.SampleRate))},
@@ -27,11 +27,10 @@ func ParseFLAC(r io.ReadSeeker, tags []Tag) ([]Tag, error) {
 		switch block.Body.(type) {
 		case *meta.VorbisComment:
 			vc := block.Body.(*meta.VorbisComment)
-			tags = fromVorbis(vc, tags)
+			out = fromVorbis(vc, out)
 		}
 	}
-
-	return tags, nil
+	return out, nil
 }
 
 func fromVorbis(comment *meta.VorbisComment, tags []Tag) []Tag {

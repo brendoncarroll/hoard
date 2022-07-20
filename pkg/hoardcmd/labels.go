@@ -7,12 +7,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var lsTagsCmd = &cobra.Command{
-	Use:   "ls-tags",
+var lsKeysCmd = &cobra.Command{
+	Use:   "ls-keys",
 	Short: "list tags to stdout",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := bufio.NewWriter(cmd.OutOrStdout())
-		if err := h.ForEachTagKey(ctx, func(k string) error {
+		if err := h.ForEachKey(ctx, "", func(k string) error {
 			_, err := fmt.Fprintf(w, "%s\n", k)
 			return err
 		}); err != nil {
@@ -29,7 +29,7 @@ var lsTagValuesCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tagKey := args[0]
 		w := bufio.NewWriter(cmd.OutOrStdout())
-		if err := h.ForEachTagValue(ctx, tagKey, func(v []byte) error {
+		if err := h.ForEachValue(ctx, "", tagKey, func(v []byte) error {
 			_, err := fmt.Fprintf(w, "%q\n", v)
 			return err
 		}); err != nil {

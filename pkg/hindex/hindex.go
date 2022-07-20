@@ -12,11 +12,10 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/brendoncarroll/hoard/pkg/hcorpus"
-	"github.com/brendoncarroll/hoard/pkg/taggers"
-	"github.com/brendoncarroll/hoard/pkg/tagging"
+	"github.com/brendoncarroll/hoard/pkg/labels"
 )
 
-type OID = hcorpus.Fingerprint
+type OID = hcorpus.ID
 
 // Root is the root of an index
 // The index is structured like this:
@@ -45,8 +44,8 @@ type Operator struct {
 func New() *Operator {
 	return &Operator{
 		gotkv: gotkv.NewOperator(
-			gotkv.WithAverageSize(gotfs.DefaultAverageBlobSizeMetadata),
-			gotkv.WithMaxSize(1<<16),
+			gotfs.DefaultAverageBlobSizeInfo,
+			1<<16,
 		),
 	}
 }
@@ -63,7 +62,7 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 	return o.gotkv.NewEmpty(ctx, s)
 }
 
-func (o *Operator) AddTags(ctx context.Context, s cadata.Store, root Root, fp OID, tags []taggers.Tag) (*Root, error) {
+func (o *Operator) AddTags(ctx context.Context, s cadata.Store, root Root, fp OID, tags []labels.Pair) (*Root, error) {
 	muts := make([]gotkv.Mutation, 2*len(tags))
 	for i, tag := range tags {
 		if err := checkTag(tag); err != nil {
@@ -81,19 +80,19 @@ func (o *Operator) AddTags(ctx context.Context, s cadata.Store, root Root, fp OI
 		}
 	}
 	sort.Slice(muts, func(i, j int) bool {
-		return bytes.Compare(muts[i].Span.Start, muts[j].Span.Start) < 0
+		return bytes.Compare(muts[i].Span.Begin, muts[j].Span.Begin) < 0
 	})
 	return o.gotkv.Mutate(ctx, s, root, muts...)
 }
 
-func (o *Operator) GetTags(ctx context.Context, s cadata.Store, root Root, oid OID) (ret []tagging.Tag, _ error) {
+func (o *Operator) GetTags(ctx context.Context, s cadata.Store, root Root, oid OID) (ret []labels.Pair, _ error) {
 	span := gotkv.PrefixSpan(makeForwardKey(nil, oid, nil))
 	if err := o.gotkv.ForEach(ctx, s, root, span, func(ent gotkv.Entry) error {
 		_, key, value, err := parseForwardEntry(ent)
 		if err != nil {
 			return err
 		}
-		ret = append(ret, tagging.Tag{
+		ret = append(ret, labels.Pair{
 			Key:   string(key),
 			Value: append([]byte{}, value...),
 		})
@@ -109,10 +108,10 @@ func (o *Operator) GetTagValue(ctx context.Context, s cadata.Store, root Root, f
 	return o.gotkv.Get(ctx, s, gotkv.Root(root), key)
 }
 
-func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, fn func(OID, []tagging.Tag) error) error {
+func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, fn func(OID, []labels.Pair) error) error {
 	span := prefixSpan(gotkv.TotalSpan(), []byte{'f', 0x00})
 	var currentFP OID
-	var tags []tagging.Tag
+	var tags []labels.Pair
 	return o.gotkv.ForEach(ctx, s, root, span, func(ent gotkv.Entry) error {
 		fp, key, value, err := parseForwardEntry(ent)
 		if err != nil {
@@ -127,7 +126,7 @@ func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, fn fu
 			currentFP = fp
 			tags = tags[:0]
 		}
-		tags = append(tags, tagging.Tag{
+		tags = append(tags, labels.Pair{
 			Key:   string(key),
 			Value: append([]byte{}, value...),
 		})
@@ -135,7 +134,7 @@ func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, fn fu
 	})
 }
 
-func (o *Operator) ForEachTagKey(ctx context.Context, s cadata.Store, root Root, fn func(string) error) error {
+func (o *Operator) ForEachKey(ctx context.Context, s cadata.Store, root Root, fn func(string) error) error {
 	span := prefixSpan(gotkv.TotalSpan(), []byte{'i', 0x00})
 	var lastKey []byte
 	return o.gotkv.ForEach(ctx, s, root, span, func(ent gotkv.Entry) error {
@@ -153,7 +152,7 @@ func (o *Operator) ForEachTagKey(ctx context.Context, s cadata.Store, root Root,
 	})
 }
 
-func (o *Operator) ForEachTagValue(ctx context.Context, s cadata.Store, root Root, tagKey string, fn func([]byte) error) error {
+func (o *Operator) ForEachValue(ctx context.Context, s cadata.Store, root Root, tagKey string, fn func([]byte) error) error {
 	prefix := []byte{'i', 0x00}
 	prefix = append(prefix, tagKey...)
 	prefix = append(prefix, 0x00)
@@ -167,12 +166,12 @@ func (o *Operator) ForEachTagValue(ctx context.Context, s cadata.Store, root Roo
 	})
 }
 
-func (o *Operator) Search(ctx context.Context, s cadata.Store, root Root, query tagging.Query) (*tagging.ResultSet, error) {
+func (o *Operator) Search(ctx context.Context, s cadata.Store, root Root, query labels.Query) (*labels.ResultSet, error) {
 	qb := o.NewQueryBackend(s, root)
-	return tagging.DoQuery(ctx, qb, query)
+	return labels.DoQuery(ctx, qb, query)
 }
 
-func checkTag(t tagging.Tag) error {
+func checkTag(t labels.Pair) error {
 	if strings.Contains(t.Key, "\x00") {
 		return errors.Errorf("tag key cannot contain NULL byte")
 	}
@@ -190,7 +189,7 @@ func makeForwardKey(out []byte, fp OID, tagKey []byte) []byte {
 	return out
 }
 
-func makeForwardEntry(tag tagging.Tag, fp OID) gotkv.Entry {
+func makeForwardEntry(tag labels.Pair, fp OID) gotkv.Entry {
 	return gotkv.Entry{
 		Key:   makeForwardKey(nil, fp, []byte(tag.Key)),
 		Value: []byte(tag.Value),
@@ -209,7 +208,7 @@ func parseForwardKey(x []byte) ([]byte, OID, error) {
 	if len(parts[1]) < len(OID{}) {
 		return nil, OID{}, errors.Errorf("too short to be fingerprint")
 	}
-	fp := hcorpus.FPFromBytes(parts[1])
+	fp := hcorpus.IDFromBytes(parts[1])
 	tagKeyBytes := parts[1][32:]
 	return tagKeyBytes, fp, nil
 }
@@ -222,7 +221,7 @@ func parseForwardEntry(ent gotkv.Entry) (OID, []byte, []byte, error) {
 	return fp, key, ent.Value, nil
 }
 
-func makeInverseKey(out []byte, tag tagging.Tag, fp OID) []byte {
+func makeInverseKey(out []byte, tag labels.Pair, fp OID) []byte {
 	out = append(out, 'i')
 	out = append(out, 0x00)
 	out = append(out, []byte(tag.Key)...)
@@ -233,7 +232,7 @@ func makeInverseKey(out []byte, tag tagging.Tag, fp OID) []byte {
 	return out
 }
 
-func makeInverseEntry(tag tagging.Tag, fp OID) gotkv.Entry {
+func makeInverseEntry(tag labels.Pair, fp OID) gotkv.Entry {
 	return gotkv.Entry{
 		Key:   makeInverseKey(nil, tag, fp),
 		Value: fp[:],
@@ -252,7 +251,7 @@ func parseInverseKey(x []byte) (key, value []byte, _ *OID, _ error) {
 	if len(dirBytes) != 1 || dirBytes[0] != 'i' {
 		return nil, nil, nil, errors.Errorf("incorrect key direction identifier: %q", dirBytes)
 	}
-	fp := hcorpus.FPFromBytes(fpBytes)
+	fp := hcorpus.IDFromBytes(fpBytes)
 	return tagKey, tagValue, &fp, nil
 }
 

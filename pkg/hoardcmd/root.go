@@ -7,10 +7,11 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cadata/fsstore"
 	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/brendoncarroll/hoard/pkg/filecell"
-	"github.com/brendoncarroll/hoard/pkg/hoard"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/spf13/cobra"
+
+	"github.com/brendoncarroll/hoard/pkg/filecell"
+	"github.com/brendoncarroll/hoard/pkg/hoard"
 )
 
 var (
@@ -25,10 +26,10 @@ func Execute() error {
 func init() {
 	rootCmd.AddCommand(catCmd)
 	rootCmd.AddCommand(addCmd)
-	rootCmd.AddCommand(lsTagsCmd)
+	rootCmd.AddCommand(lsKeysCmd)
 	rootCmd.AddCommand(searchCmd)
-	rootCmd.AddCommand(lsFPCmd)
-	rootCmd.AddCommand(lsObjsCmd)
+	rootCmd.AddCommand(lsIDCmd)
+	rootCmd.AddCommand(lsExprCmd)
 	rootCmd.AddCommand(lsTagValuesCmd)
 }
 
@@ -60,8 +61,10 @@ func setup() (err error) {
 	store := fsstore.New(storeFS, cadata.DefaultHash, gotfs.DefaultMaxBlobSize)
 	h = hoard.New(hoard.Params{
 		Volume: hoard.Volume{
-			Cell:  cell,
-			Store: store,
+			Cell:   cell,
+			Corpus: store,
+			Index:  store,
+			GLFS:   store,
 		},
 	})
 	return nil

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/brendoncarroll/hoard/pkg/tagging"
+	"github.com/brendoncarroll/hoard/pkg/labels"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -19,7 +19,7 @@ var searchCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		q := tagging.Query{
+		q := labels.Query{
 			Where: *pred,
 			Limit: 100,
 		}
@@ -30,7 +30,7 @@ var searchCmd = &cobra.Command{
 		}
 		w := bufio.NewWriter(cmd.OutOrStdout())
 		for _, id := range res {
-			tags, err := h.GetTags(ctx, id)
+			tags, err := h.GetLabels(ctx, id, "")
 			if err != nil {
 				return err
 			}
@@ -42,15 +42,15 @@ var searchCmd = &cobra.Command{
 	},
 }
 
-func parsePredicate(args []string) (*tagging.Predicate, error) {
-	var subQueries []tagging.Query
+func parsePredicate(args []string) (*labels.Predicate, error) {
+	var subQueries []labels.Query
 	for _, arg := range args {
 		switch {
 		case strings.Contains(arg, "="):
 			parts := strings.SplitN(arg, "=", 2)
-			q := tagging.Query{
-				Where: tagging.Predicate{
-					Op:    tagging.OpEq,
+			q := labels.Query{
+				Where: labels.Predicate{
+					Op:    labels.OpEq,
 					Key:   parts[0],
 					Value: parts[1],
 				},
@@ -61,8 +61,8 @@ func parsePredicate(args []string) (*tagging.Predicate, error) {
 			return nil, errors.Errorf("could not parse into predicate %q", arg)
 		}
 	}
-	return &tagging.Predicate{
-		Op:         tagging.OpOR,
+	return &labels.Predicate{
+		Op:         labels.OpOR,
 		SubQueries: subQueries,
 	}, nil
 }

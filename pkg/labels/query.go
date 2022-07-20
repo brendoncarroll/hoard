@@ -1,4 +1,4 @@
-package tagging
+package labels
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"github.com/brendoncarroll/hoard/pkg/hcorpus"
 )
 
-type ID = hcorpus.Fingerprint
+type ID = hcorpus.ID
 
 type ResultSet struct {
 	IDs                  []ID
@@ -60,7 +60,7 @@ type IterFunc = func(id ID, key, value []byte) error
 type Span = state.ByteSpan
 
 type QueryBackend interface {
-	Scan(ctx context.Context, span Span, fn IterFunc) error
+	ScanForward(ctx context.Context, span Span, fn IterFunc) error
 	ScanInverted(ctx context.Context, tagKey string, fn IterFunc) error
 	GetValue(ctx context.Context, id ID, tagKey string) ([]byte, error)
 }
@@ -116,7 +116,7 @@ func query(ctx context.Context, be QueryBackend, ids map[ID]int, q Query, prunin
 			count++
 		}
 	case OpAny:
-		err := be.Scan(ctx, Span{}, func(id ID, _, value []byte) error {
+		err := be.ScanForward(ctx, Span{}, func(id ID, _, value []byte) error {
 			ids[id]++
 			if len(ids) > q.Limit {
 				return ErrStopIter

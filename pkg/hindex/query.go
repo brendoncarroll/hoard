@@ -4,11 +4,11 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/hoard/pkg/tagging"
+	"github.com/brendoncarroll/hoard/pkg/labels"
 	"github.com/gotvc/got/pkg/gotkv"
 )
 
-var _ tagging.QueryBackend = QueryBackend{}
+var _ labels.QueryBackend = QueryBackend{}
 
 type QueryBackend struct {
 	op   *Operator
@@ -16,8 +16,8 @@ type QueryBackend struct {
 	root Root
 }
 
-func (qb QueryBackend) Scan(ctx context.Context, span tagging.Span, fn tagging.IterFunc) error {
-	span2 := prefixSpan(gotkv.Span{Start: span.Begin, End: span.End}, []byte{'f', 0x00})
+func (qb QueryBackend) ScanForward(ctx context.Context, span labels.Span, fn labels.IterFunc) error {
+	span2 := prefixSpan(gotkv.Span{Begin: span.Begin, End: span.End}, []byte{'f', 0x00})
 	return qb.op.gotkv.ForEach(ctx, qb.s, qb.root, span2, func(ent gotkv.Entry) error {
 		fp, key, value, err := parseForwardEntry(ent)
 		if err != nil {
@@ -31,7 +31,7 @@ func (qb QueryBackend) GetValue(ctx context.Context, id OID, key string) ([]byte
 	return qb.op.gotkv.Get(ctx, qb.s, qb.root, makeForwardKey(nil, id, []byte(key)))
 }
 
-func (qb QueryBackend) ScanInverted(ctx context.Context, tagKey string, fn tagging.IterFunc) error {
+func (qb QueryBackend) ScanInverted(ctx context.Context, tagKey string, fn labels.IterFunc) error {
 	var span gotkv.Span
 	if tagKey != "" {
 		span = prefixSpan(gotkv.PrefixSpan([]byte(tagKey)), []byte{'i', 0x00})
@@ -46,15 +46,15 @@ func (qb QueryBackend) ScanInverted(ctx context.Context, tagKey string, fn taggi
 }
 
 func prefixSpan(x gotkv.Span, prefix []byte) gotkv.Span {
-	start := prefix
-	start = append(start, x.Start...)
+	begin := prefix
+	begin = append(begin, x.Begin...)
 	end := gotkv.PrefixEnd(prefix)
 	if x.End != nil {
 		end = prefix
 		end = append(end, x.End...)
 	}
 	return gotkv.Span{
-		Start: start,
+		Begin: begin,
 		End:   end,
 	}
 }

@@ -5,16 +5,15 @@ import (
 	"fmt"
 
 	"github.com/brendoncarroll/hoard/pkg/hoard"
-	"github.com/brendoncarroll/hoard/pkg/tagging"
 	"github.com/spf13/cobra"
 )
 
-var lsFPCmd = &cobra.Command{
-	Use:   "ls-fp",
-	Short: "lists objects by their fingerprint",
+var lsIDCmd = &cobra.Command{
+	Use:   "ls-id",
+	Short: "lists expressions by ID",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := bufio.NewWriter(cmd.OutOrStdout())
-		if err := h.ForEach(ctx, func(id hoard.OID, _ []tagging.Tag) error {
+		if err := h.ForEachExpr(ctx, hoard.IDSpan{}, func(id hoard.ID, _ hoard.Expr) error {
 			fmt.Fprintf(w, "%v\n", id)
 			return nil
 		}); err != nil {
@@ -24,15 +23,19 @@ var lsFPCmd = &cobra.Command{
 	},
 }
 
-var lsObjsCmd = &cobra.Command{
+var lsExprCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "lists objects and their tags",
+	Short: "lists expressions and their labels",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := bufio.NewWriter(cmd.OutOrStdout())
-		if err := h.ForEach(ctx, func(id hoard.OID, tags []tagging.Tag) error {
+		if err := h.ForEachExpr(ctx, hoard.IDSpan{}, func(id hoard.ID, e hoard.Expr) error {
+			ls, err := h.GetLabels(ctx, id, "")
+			if err != nil {
+				return err
+			}
 			fmt.Fprintf(w, "%v\n", id)
-			for _, tag := range tags {
-				fmt.Fprintf(w, "\t%v\n", tag)
+			for _, pair := range ls {
+				fmt.Fprintf(w, "\t%v\n", pair)
 			}
 			return nil
 		}); err != nil {

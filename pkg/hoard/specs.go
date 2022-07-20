@@ -15,8 +15,10 @@ import (
 )
 
 type VolumeSpec struct {
-	Cell  CellSpec  `json:"cell"`
-	Store StoreSpec `json:"store"`
+	Cell CellSpec `json:"cell"`
+
+	CorpusStore StoreSpec `json:"corpus_store"`
+	GLFSStore   StoreSpec `json:"glfs_store"`
 }
 
 type CellSpec struct {
@@ -38,13 +40,18 @@ func MakeVolume(spec VolumeSpec) (*Volume, error) {
 	if err != nil {
 		return nil, err
 	}
-	store, err := MakeStore(spec.Store)
+	corpusStore, err := MakeStore(spec.CorpusStore)
+	if err != nil {
+		return nil, err
+	}
+	glfsStore, err := MakeStore(spec.CorpusStore)
 	if err != nil {
 		return nil, err
 	}
 	return &Volume{
-		Cell:  cell,
-		Store: store,
+		Cell:   cell,
+		Corpus: corpusStore,
+		GLFS:   glfsStore,
 	}, nil
 }
 
